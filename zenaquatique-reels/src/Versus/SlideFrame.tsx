@@ -9,9 +9,10 @@ import {
 
 export const SlideFrame: React.FC<{
   background: string;
+  scrim?: string;
   durationInFrames: number;
   children: React.ReactNode;
-}> = ({ background, durationInFrames, children }) => {
+}> = ({ background, scrim, durationInFrames, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -33,6 +34,7 @@ export const SlideFrame: React.FC<{
 
   return (
     <AbsoluteFill style={{ background }}>
+      {scrim ? <AbsoluteFill style={{ background: scrim }} /> : null}
       <AbsoluteFill
         style={{
           opacity,

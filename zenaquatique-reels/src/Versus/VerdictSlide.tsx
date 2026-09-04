@@ -7,9 +7,18 @@ export const VerdictSlide: React.FC<{
   text: string;
   cta: string;
   durationInFrames: number;
-}> = ({ brand, text, cta, durationInFrames }) => {
+  hasVideoBackground: boolean;
+}> = ({ brand, text, cta, durationInFrames, hasVideoBackground }) => {
+  const textShadow = hasVideoBackground
+    ? "0 2px 16px rgba(0,0,0,0.6)"
+    : undefined;
+
   return (
-    <SlideFrame background={colors.brand} durationInFrames={durationInFrames}>
+    <SlideFrame
+      background={hasVideoBackground ? "transparent" : colors.brand}
+      scrim={hasVideoBackground ? colors.scrimBrand : undefined}
+      durationInFrames={durationInFrames}
+    >
       <div
         style={{
           color: colors.aqua,
@@ -18,6 +27,7 @@ export const VerdictSlide: React.FC<{
           letterSpacing: 4,
           textTransform: "uppercase",
           marginBottom: 32,
+          textShadow,
         }}
       >
         Verdict
@@ -30,6 +40,7 @@ export const VerdictSlide: React.FC<{
           lineHeight: 1.25,
           textAlign: "center",
           marginBottom: 56,
+          textShadow,
         }}
       >
         {text}
@@ -54,6 +65,7 @@ export const VerdictSlide: React.FC<{
           fontWeight: 600,
           letterSpacing: 2,
           marginTop: 28,
+          textShadow,
         }}
       >
         {brand}

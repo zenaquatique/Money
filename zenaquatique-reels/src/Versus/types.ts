@@ -30,8 +30,12 @@ export type VersusProps = {
   optionB: VersusOption;
   verdict: string;
   cta: string;
-  // 2-3 short video clips ("rushes") to use as slide backgrounds.
-  // Accepted here so the schema is stable, not rendered yet (text-only v1).
+  // 2-3 rush clips to use as slide backgrounds, in the exact order to use
+  // them: every clip but the last plays as a short cut during the Hook,
+  // the last one is the longer clip behind Option A/B/Verdict. The caller
+  // (Make) picks which files and their order for each render — Remotion
+  // does not choose or randomize clips itself. Omit/empty for a
+  // text-only render on a solid background.
   clips?: VersusClip[];
   durationsInSeconds?: Partial<VersusSlideDurations>;
 };
