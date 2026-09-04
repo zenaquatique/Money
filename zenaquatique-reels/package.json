@@ -6,11 +6,14 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@remotion/bundler": "^4.0.520",
     "@remotion/cli": "4.0.520",
+    "@remotion/renderer": "^4.0.520",
+    "@remotion/tailwind-v4": "4.0.520",
+    "express": "^5.2.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.520",
-    "@remotion/tailwind-v4": "4.0.520",
     "tailwindcss": "4.0.0"
   },
   "devDependencies": {
@@ -25,7 +28,8 @@
     "dev": "remotion studio",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "server": "node server/render-server.js"
   },
   "sideEffects": [
     "*.css"

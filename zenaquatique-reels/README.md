@@ -60,6 +60,84 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 Placez vos rushes dans `public/video/rushes/` (ou tout autre sous-dossier de
 `public/`) pour qu'ils soient servis en `src` relatif.
 
+## Déclencher un rendu depuis Make (webhook + tunnel local)
+
+Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :
+tu lui envoies les textes des slides (+ éventuellement `clips`) en JSON, il
+te renvoie le mp4 généré. Cette section explique comment le connecter à
+Make via un tunnel local (ngrok) — pratique pour tester, mais **ton
+ordinateur doit rester allumé et connecté** pendant que Make peut appeler
+le webhook (voir plus bas pour une solution permanente).
+
+**1. Démarrer le serveur en local**
+
+```console
+cd zenaquatique-reels
+npm install
+npm run server
+```
+
+Le serveur écoute sur `http://localhost:3001`. Teste-le sans Make d'abord :
+
+```console
+curl -X POST http://localhost:3001/render \
+  -H "Content-Type: application/json" \
+  -d '{"brand":"ZenAquatique","hook":"Ton bac vire au vert ?","optionA":{"label":"La méthode classique","text":"Produits chimiques, résultats incertains."},"optionB":{"label":"ZenAquatique","text":"Un écosystème équilibré."},"verdict":"L'\''aquascaping durable.","cta":"zenaquatique.fr"}' \
+  -o test.mp4
+```
+
+Si `test.mp4` s'ouvre et joue la vidéo, le serveur fonctionne.
+
+**2. Sécuriser le webhook (recommandé)**
+
+Comme le tunnel sera accessible publiquement, protège-le avec une clé :
+
+```console
+RENDER_API_KEY=un-secret-a-toi npm run server
+```
+
+Make devra alors envoyer l'en-tête `x-api-key: un-secret-a-toi` dans sa requête.
+
+**3. Ouvrir un tunnel avec ngrok**
+
+- Installe ngrok : https://ngrok.com/download (compte gratuit, récupère ton
+  "authtoken" sur leur site puis `ngrok config add-authtoken <ton-token>`)
+- Dans un **autre terminal** (laisse le serveur tourner dans le premier) :
+
+```console
+ngrok http 3001
+```
+
+ngrok affiche une adresse du type `https://xxxx.ngrok-free.app` — c'est
+l'URL publique à donner à Make. ⚠️ Avec un compte gratuit, cette adresse
+**change à chaque redémarrage** de ngrok : il faudra la remettre à jour
+dans Make.
+
+**4. Configurer le module HTTP dans Make**
+
+- Méthode : `POST`
+- URL : `https://xxxx.ngrok-free.app/render`
+- En-têtes : `Content-Type: application/json` et `x-api-key: un-secret-a-toi`
+  (si configuré à l'étape 2)
+- Corps (JSON) : les champs `brand`, `hook`, `optionA`, `optionB`, `verdict`,
+  `cta`, et optionnellement `clips` (voir section ci-dessus)
+- Le module doit interpréter la réponse comme un **fichier binaire** (pas
+  du JSON) — dans Make, choisis "Parse response" désactivé ou récupère le
+  contenu brut pour l'enregistrer/l'envoyer ailleurs (Google Drive, etc.)
+- Augmente le timeout du module HTTP à ~120s : un rendu de 21s peut prendre
+  30 à 90 secondes selon la machine.
+
+**Important** : les fichiers listés dans `clips[].src` (chemins relatifs)
+doivent exister dans `public/` **sur la machine qui fait tourner le
+serveur** — donc place tes vraies rushes dans
+`public/video/rushes/` sur ton PC avant de lancer `npm run server`.
+
+**Pour un usage régulier (pas juste des tests)** : cette solution locale +
+ngrok n'est pas faite pour durer (PC à garder allumé, URL qui change). La
+suite logique est d'héberger ce même serveur sur une machine cloud
+toujours allumée (ex. Render.com) avec une adresse fixe — demande-le
+quand tu seras prêt à passer en continu.
+
 ## Commands
 
 **Install Dependencies**
