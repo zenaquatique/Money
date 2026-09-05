@@ -60,6 +60,16 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 Placez vos rushes dans `public/video/rushes/` (ou tout autre sous-dossier de
 `public/`) pour qu'ils soient servis en `src` relatif.
 
+**Formats de fichier** : `.mp4` et `.mov` fonctionnent tous les deux sans
+rien à configurer (`.mov` est un export standard iPhone/caméra en H.264 ou
+H.265 + AAC — testé et validé). Seul cas à éviter : un `.mov` encodé en
+**ProRes** (fréquent en export "pro"/montage), non pris en charge par le
+moteur de rendu — reconvertis-le d'abord en H.264 :
+
+```console
+ffmpeg -i rush.mov -c:v libx264 -pix_fmt yuv420p -c:a aac rush.mp4
+```
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :

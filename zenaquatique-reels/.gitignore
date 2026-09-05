@@ -5,7 +5,3 @@ dist
 
 # Ignore the output video from Git but not videos you import into src/.
 out
-
-# Placeholder/test rush clips generated during development — replace with
-# real footage, don't commit synthetic test fixtures as if they were brand assets.
-public/video/rushes/*.mp4
