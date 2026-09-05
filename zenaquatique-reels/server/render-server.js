@@ -7,9 +7,29 @@ const { renderMedia, selectComposition } = require("@remotion/renderer");
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.RENDER_API_KEY;
-const COMPOSITION_ID = "Versus";
 const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
-const REQUIRED_FIELDS = ["brand", "hook", "optionA", "optionB", "verdict", "cta"];
+const DEFAULT_FORMAT = "versus";
+// Which Remotion composition to render per "format" value, and the fields
+// each one requires. "format" is absent → DEFAULT_FORMAT, unchanged from
+// before "Top3" existed, so existing Versus callers don't need to change.
+const COMPOSITIONS = {
+  versus: {
+    id: "Versus",
+    requiredFields: ["brand", "hook", "optionA", "optionB", "verdict", "cta"],
+  },
+  top3: {
+    id: "Top3",
+    requiredFields: [
+      "brand",
+      "hook",
+      "produit1",
+      "produit2",
+      "produit3",
+      "benefices",
+      "cta",
+    ],
+  },
+};
 // Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
 const MAX_CLIPS = 3;
 
@@ -41,7 +61,16 @@ app.post("/render", async (req, res) => {
     return;
   }
 
-  const missing = REQUIRED_FIELDS.filter((field) => !inputProps[field]);
+  const formatKey = String(inputProps.format || DEFAULT_FORMAT).toLowerCase();
+  const compositionConfig = COMPOSITIONS[formatKey];
+  if (!compositionConfig) {
+    res.status(400).json({
+      error: `format inconnu: "${inputProps.format}". Valeurs acceptées: ${Object.keys(COMPOSITIONS).join(", ")}.`,
+    });
+    return;
+  }
+
+  const missing = compositionConfig.requiredFields.filter((field) => !inputProps[field]);
   if (missing.length > 0) {
     res.status(400).json({ error: `Champ(s) manquant(s): ${missing.join(", ")}` });
     return;
@@ -73,14 +102,14 @@ app.post("/render", async (req, res) => {
     const serveUrl = await getBundleLocation();
     const composition = await selectComposition({
       serveUrl,
-      id: COMPOSITION_ID,
+      id: compositionConfig.id,
       inputProps,
       browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
     });
 
     outputPath = path.join(
       os.tmpdir(),
-      `versus-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
+      `${formatKey}-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
     );
 
     console.log(`Rendu en cours -> ${outputPath}`);
@@ -94,7 +123,7 @@ app.post("/render", async (req, res) => {
     });
 
     res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", 'attachment; filename="versus.mp4"');
+    res.setHeader("Content-Disposition", `attachment; filename="${formatKey}.mp4"`);
     res.sendFile(outputPath, (err) => {
       fs.unlink(outputPath, () => {});
       if (err && !res.headersSent) {

@@ -70,6 +70,24 @@ moteur de rendu — reconvertis-le d'abord en H.264 :
 ffmpeg -i rush.mov -c:v libx264 -pix_fmt yuv420p -c:a aac rush.mp4
 ```
 
+## Format "Top3"
+
+Composition `Top3` (`src/Top3/`) génère des Reels verticaux (1080×1920,
+30fps) au format "top 3 produits" en 6 slides : Hook / Produit 1 / Produit 2
+/ Produit 3 / Bénéfices / CTA. Durée totale : 18s (2s / 4s / 4s / 4s / 2s /
+2s), ajustable via `durationsInSeconds`.
+
+Props (voir `src/Top3/types.ts`) :
+
+- `brand`, `hook`, `produit1: { label, text }`, `produit2: { label, text }`,
+  `produit3: { label, text }`, `benefices`, `cta`
+- `clips?: { src, label }[]` — même contrat que pour Versus (voir section
+  "Fonds vidéo" plus haut) : 2-3 rushes fournis explicitement par l'appelant
+- `durationsInSeconds?: { hook, produit1, produit2, produit3, benefices, cta }`
+
+Réutilise les mêmes composants partagés que Versus (`SlideFrame`, `colors`,
+`BackgroundVideoLayer`, `clips.ts`) pour une identité visuelle cohérente.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :
@@ -136,6 +154,17 @@ dans Make.
   contenu brut pour l'enregistrer/l'envoyer ailleurs (Google Drive, etc.)
 - Augmente le timeout du module HTTP à ~120s : un rendu de 21s peut prendre
   30 à 90 secondes selon la machine.
+
+**Choisir le format** : ajoute un champ `"format"` dans le corps JSON —
+`"versus"` (défaut si le champ est absent, donc les scénarios Make déjà en
+place n'ont rien à changer) ou `"top3"`. Chaque format attend ses propres
+champs obligatoires (voir sections "Versus"/"Top3" ci-dessus) ; il n'y a
+rien d'autre à changer dans la configuration Make (même URL, mêmes
+en-têtes).
+
+```json
+{ "format": "top3", "brand": "ZenAquatique", "hook": "...", "produit1": {...}, ... }
+```
 
 **Important** : les fichiers listés dans `clips[].src` (chemins relatifs)
 doivent exister dans `public/` **sur la machine qui fait tourner le
