@@ -10,6 +10,8 @@ const API_KEY = process.env.RENDER_API_KEY;
 const COMPOSITION_ID = "Versus";
 const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
 const REQUIRED_FIELDS = ["brand", "hook", "optionA", "optionB", "verdict", "cta"];
+// Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
+const MAX_CLIPS = 3;
 
 let bundleLocationPromise = null;
 const getBundleLocation = () => {
@@ -43,6 +45,27 @@ app.post("/render", async (req, res) => {
   if (missing.length > 0) {
     res.status(400).json({ error: `Champ(s) manquant(s): ${missing.join(", ")}` });
     return;
+  }
+
+  if (inputProps.clips !== undefined) {
+    if (!Array.isArray(inputProps.clips)) {
+      res.status(400).json({ error: "Le champ clips doit être un tableau." });
+      return;
+    }
+    if (inputProps.clips.length > MAX_CLIPS) {
+      res.status(400).json({
+        error:
+          `clips contient ${inputProps.clips.length} fichiers, le maximum est ${MAX_CLIPS}. ` +
+          "Choisis explicitement 2-3 rushes pour ce rendu (le dernier étant le plus long), " +
+          "ne renvoie pas toute la bibliothèque de rushes disponible.",
+      });
+      return;
+    }
+    const badClip = inputProps.clips.find((clip) => !clip || typeof clip.src !== "string" || !clip.src);
+    if (badClip) {
+      res.status(400).json({ error: "Chaque élément de clips doit avoir un champ src (chaîne non vide)." });
+      return;
+    }
   }
 
   let outputPath;
