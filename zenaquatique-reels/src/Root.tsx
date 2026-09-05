@@ -1,5 +1,12 @@
 import "./index.css";
 import { Composition, type CalculateMetadataFunction } from "remotion";
+import { educatifDefaultProps } from "./Educatif/defaultProps";
+import { EducatifComposition } from "./Educatif/EducatifComposition";
+import {
+  getTotalDurationInFrames as getEducatifTotalDurationInFrames,
+  resolveDurations as resolveEducatifDurations,
+} from "./Educatif/timing";
+import type { EducatifProps } from "./Educatif/types";
 import { top3DefaultProps } from "./Top3/defaultProps";
 import {
   getTotalDurationInFrames as getTop3TotalDurationInFrames,
@@ -38,6 +45,18 @@ const calculateTop3Metadata: CalculateMetadataFunction<Top3Props> = ({
   };
 };
 
+const calculateEducatifMetadata: CalculateMetadataFunction<EducatifProps> = ({
+  props,
+}) => {
+  const durations = resolveEducatifDurations(props.durationsInSeconds);
+  return {
+    durationInFrames: getEducatifTotalDurationInFrames(durations, FPS),
+    fps: FPS,
+    width: 1080,
+    height: 1920,
+  };
+};
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
@@ -66,6 +85,19 @@ export const RemotionRoot: React.FC = () => {
         )}
         defaultProps={top3DefaultProps}
         calculateMetadata={calculateTop3Metadata}
+      />
+      <Composition
+        id="Educatif"
+        component={EducatifComposition}
+        fps={FPS}
+        width={1080}
+        height={1920}
+        durationInFrames={getEducatifTotalDurationInFrames(
+          resolveEducatifDurations(undefined),
+          FPS,
+        )}
+        defaultProps={educatifDefaultProps}
+        calculateMetadata={calculateEducatifMetadata}
       />
     </>
   );

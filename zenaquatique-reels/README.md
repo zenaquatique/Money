@@ -88,6 +88,25 @@ Props (voir `src/Top3/types.ts`) :
 Réutilise les mêmes composants partagés que Versus (`SlideFrame`, `colors`,
 `BackgroundVideoLayer`, `clips.ts`) pour une identité visuelle cohérente.
 
+## Format "Educatif"
+
+Composition `Educatif` (`src/Educatif/`) génère des Reels verticaux
+(1080×1920, 30fps) au format "conseils" en 5 slides : Hook / Conseil 1 /
+Conseil 2 / Conseil 3 / CTA. Durée totale : 20s (3s / 5s / 5s / 5s / 2s),
+ajustable via `durationsInSeconds`.
+
+Props (voir `src/Educatif/types.ts`) :
+
+- `brand`, `hook`, `conseil1`, `conseil2`, `conseil3`, `cta` (chaînes de
+  texte simples, pas d'objet `{label, text}` contrairement à Top3)
+- `clips?: { src, label }[]` — même contrat que Versus/Top3 (voir section
+  "Fonds vidéo" plus haut)
+- `durationsInSeconds?: { hook, conseil1, conseil2, conseil3, cta }`
+
+Réutilise les mêmes composants partagés que Versus et Top3 (`SlideFrame`,
+`colors`, `BackgroundVideoLayer`, `clips.ts`, et le `CtaSlide` de Top3) pour
+une identité visuelle cohérente.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :
@@ -157,10 +176,10 @@ dans Make.
 
 **Choisir le format** : ajoute un champ `"format"` dans le corps JSON —
 `"versus"` (défaut si le champ est absent, donc les scénarios Make déjà en
-place n'ont rien à changer) ou `"top3"`. Chaque format attend ses propres
-champs obligatoires (voir sections "Versus"/"Top3" ci-dessus) ; il n'y a
-rien d'autre à changer dans la configuration Make (même URL, mêmes
-en-têtes).
+place n'ont rien à changer), `"top3"` ou `"educatif"`. Chaque format attend
+ses propres champs obligatoires (voir sections "Versus"/"Top3"/"Educatif"
+ci-dessus) ; il n'y a rien d'autre à changer dans la configuration Make
+(même URL, mêmes en-têtes).
 
 ```json
 { "format": "top3", "brand": "ZenAquatique", "hook": "...", "produit1": {...}, ... }

@@ -29,6 +29,17 @@ const COMPOSITIONS = {
       "cta",
     ],
   },
+  educatif: {
+    id: "Educatif",
+    requiredFields: [
+      "brand",
+      "hook",
+      "conseil1",
+      "conseil2",
+      "conseil3",
+      "cta",
+    ],
+  },
 };
 // Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
 const MAX_CLIPS = 3;
