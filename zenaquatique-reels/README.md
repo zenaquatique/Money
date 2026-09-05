@@ -127,6 +127,22 @@ Réutilise les mêmes composants partagés que les autres formats
 (`SlideFrame`, `colors`, `BackgroundVideoLayer`, `clips.ts`, `HookSlide` de
 Versus, `CtaSlide` de Top3) ; seul `MessageSlide` est propre à ce format.
 
+## Qualité de rendu (netteté)
+
+`server/render-server.js` appelle `renderMedia` via l'API Node.js de
+Remotion — **`remotion.config.ts` ne s'applique pas** dans ce cas (voir le
+commentaire en tête de ce fichier), donc tous les réglages de qualité sont
+passés explicitement à `renderMedia` :
+
+- `imageFormat: "png"` — capture chaque frame sans perte avant l'encodage.
+  Sans ce réglage, Remotion retombe sur son défaut interne (`jpeg`), qui
+  rend tout flou (y compris le texte, jamais filmé mais recapturé avec
+  perte à chaque frame).
+- `crf: 18` — qualité H.264 quasi sans perte (l'échelle va de 0 à 51, plus
+  bas = meilleure qualité).
+
+Ne pas retirer ces deux options sous peine de retomber sur des rendus flous.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :

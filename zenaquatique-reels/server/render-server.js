@@ -132,6 +132,14 @@ app.post("/render", async (req, res) => {
       composition,
       serveUrl,
       codec: "h264",
+      // remotion.config.ts does NOT apply when calling the Node.js API
+      // directly (only to the CLI), so every encoding quality setting
+      // must be passed here explicitly or Remotion silently falls back
+      // to its own defaults. In particular the default image format is
+      // "jpeg" (lossy per-frame capture) — that was making every frame,
+      // including the crisp on-screen text, blurry. "png" is lossless.
+      imageFormat: "png",
+      crf: 18,
       outputLocation: outputPath,
       inputProps,
       browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
