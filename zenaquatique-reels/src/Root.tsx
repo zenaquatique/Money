@@ -1,5 +1,12 @@
 import "./index.css";
 import { Composition, type CalculateMetadataFunction } from "remotion";
+import { conceptDefaultProps } from "./Concept/defaultProps";
+import { ConceptComposition } from "./Concept/ConceptComposition";
+import {
+  getTotalDurationInFrames as getConceptTotalDurationInFrames,
+  resolveDurations as resolveConceptDurations,
+} from "./Concept/timing";
+import type { ConceptProps } from "./Concept/types";
 import { educatifDefaultProps } from "./Educatif/defaultProps";
 import { EducatifComposition } from "./Educatif/EducatifComposition";
 import {
@@ -57,6 +64,18 @@ const calculateEducatifMetadata: CalculateMetadataFunction<EducatifProps> = ({
   };
 };
 
+const calculateConceptMetadata: CalculateMetadataFunction<ConceptProps> = ({
+  props,
+}) => {
+  const durations = resolveConceptDurations(props.durationsInSeconds);
+  return {
+    durationInFrames: getConceptTotalDurationInFrames(durations, FPS),
+    fps: FPS,
+    width: 1080,
+    height: 1920,
+  };
+};
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
@@ -98,6 +117,19 @@ export const RemotionRoot: React.FC = () => {
         )}
         defaultProps={educatifDefaultProps}
         calculateMetadata={calculateEducatifMetadata}
+      />
+      <Composition
+        id="Concept"
+        component={ConceptComposition}
+        fps={FPS}
+        width={1080}
+        height={1920}
+        durationInFrames={getConceptTotalDurationInFrames(
+          resolveConceptDurations(undefined),
+          FPS,
+        )}
+        defaultProps={conceptDefaultProps}
+        calculateMetadata={calculateConceptMetadata}
       />
     </>
   );

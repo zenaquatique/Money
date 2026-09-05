@@ -107,6 +107,26 @@ Réutilise les mêmes composants partagés que Versus et Top3 (`SlideFrame`,
 `colors`, `BackgroundVideoLayer`, `clips.ts`, et le `CtaSlide` de Top3) pour
 une identité visuelle cohérente.
 
+## Format "Concept"
+
+Composition `Concept` (`src/Concept/`) génère des Reels verticaux
+(1080×1920, 30fps) au format "message inspirant" en 3 slides : Hook /
+Message / CTA. Durée totale : 18s (5s / 9s / 4s), ajustable via
+`durationsInSeconds`. Rythme plus posé que les autres formats (slides plus
+longues, pas de badge/kicker sur le Message) — même mécanique d'animation
+que les autres, juste un tempo plus lent porté par la durée des slides.
+
+Props (voir `src/Concept/types.ts`) :
+
+- `brand`, `hook`, `message`, `cta` (chaînes de texte simples)
+- `clips?: { src, label }[]` — même contrat que les autres formats (voir
+  section "Fonds vidéo" plus haut)
+- `durationsInSeconds?: { hook, message, cta }`
+
+Réutilise les mêmes composants partagés que les autres formats
+(`SlideFrame`, `colors`, `BackgroundVideoLayer`, `clips.ts`, `HookSlide` de
+Versus, `CtaSlide` de Top3) ; seul `MessageSlide` est propre à ce format.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :
@@ -176,10 +196,10 @@ dans Make.
 
 **Choisir le format** : ajoute un champ `"format"` dans le corps JSON —
 `"versus"` (défaut si le champ est absent, donc les scénarios Make déjà en
-place n'ont rien à changer), `"top3"` ou `"educatif"`. Chaque format attend
-ses propres champs obligatoires (voir sections "Versus"/"Top3"/"Educatif"
-ci-dessus) ; il n'y a rien d'autre à changer dans la configuration Make
-(même URL, mêmes en-têtes).
+place n'ont rien à changer), `"top3"`, `"educatif"` ou `"concept"`. Chaque
+format attend ses propres champs obligatoires (voir sections
+"Versus"/"Top3"/"Educatif"/"Concept" ci-dessus) ; il n'y a rien d'autre à
+changer dans la configuration Make (même URL, mêmes en-têtes).
 
 ```json
 { "format": "top3", "brand": "ZenAquatique", "hook": "...", "produit1": {...}, ... }

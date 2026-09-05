@@ -40,6 +40,10 @@ const COMPOSITIONS = {
       "cta",
     ],
   },
+  concept: {
+    id: "Concept",
+    requiredFields: ["brand", "hook", "message", "cta"],
+  },
 };
 // Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
 const MAX_CLIPS = 3;
