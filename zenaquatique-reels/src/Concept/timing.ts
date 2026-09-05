@@ -8,7 +8,7 @@ export const resolveDurations = (
   ...overrides,
 });
 
-const SLIDE_ORDER = ["hook", "message", "cta"] as const;
+const SLIDE_ORDER = ["hook", "message1", "message2", "cta"] as const;
 
 export type SlideKey = (typeof SLIDE_ORDER)[number];
 

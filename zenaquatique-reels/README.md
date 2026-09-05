@@ -110,18 +110,20 @@ une identité visuelle cohérente.
 ## Format "Concept"
 
 Composition `Concept` (`src/Concept/`) génère des Reels verticaux
-(1080×1920, 30fps) au format "message inspirant" en 3 slides : Hook /
-Message / CTA. Durée totale : 18s (5s / 9s / 4s), ajustable via
-`durationsInSeconds`. Rythme plus posé que les autres formats (slides plus
-longues, pas de badge/kicker sur le Message) — même mécanique d'animation
+(1080×1920, 30fps) au format "message inspirant" en 4 slides : Hook /
+Message 1 / Message 2 / CTA. Durée totale : 18s (4s / 5s / 5s / 4s),
+ajustable via `durationsInSeconds`. Le message est scindé en deux blocs
+(au lieu d'un seul bloc de 9s) pour laisser plus de place à une voix off
+qui se pose sur le texte. Rythme plus posé que les autres formats
+(pas de badge/kicker sur les slides Message) — même mécanique d'animation
 que les autres, juste un tempo plus lent porté par la durée des slides.
 
 Props (voir `src/Concept/types.ts`) :
 
-- `brand`, `hook`, `message`, `cta` (chaînes de texte simples)
+- `brand`, `hook`, `message1`, `message2`, `cta` (chaînes de texte simples)
 - `clips?: { src, label }[]` — même contrat que les autres formats (voir
   section "Fonds vidéo" plus haut)
-- `durationsInSeconds?: { hook, message, cta }`
+- `durationsInSeconds?: { hook, message1, message2, cta }`
 
 Réutilise les mêmes composants partagés que les autres formats
 (`SlideFrame`, `colors`, `BackgroundVideoLayer`, `clips.ts`, `HookSlide` de

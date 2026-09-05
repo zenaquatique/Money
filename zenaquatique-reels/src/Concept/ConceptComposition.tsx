@@ -12,14 +12,16 @@ import type { ConceptProps } from "./types";
 export const ConceptComposition: React.FC<ConceptProps> = ({
   brand,
   hook,
-  message,
+  message1,
+  message2,
   cta,
   clips,
   durationsInSeconds,
 }) => {
   const { fps } = useVideoConfig();
   const durations = resolveDurations(durationsInSeconds);
-  const [hookSlide, messageSlide, ctaSlide] = getSlideTimeline(durations, fps);
+  const [hookSlide, message1Slide, message2Slide, ctaSlide] =
+    getSlideTimeline(durations, fps);
   const totalDurationInFrames = getTotalDurationInFrames(durations, fps);
   const { introClips, tailClip } = planClips(clips);
   const hasVideoBackground = tailClip !== undefined;
@@ -40,10 +42,23 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           hasVideoBackground={hasVideoBackground}
         />
       </Sequence>
-      <Sequence from={messageSlide.from} durationInFrames={messageSlide.durationInFrames}>
+      <Sequence
+        from={message1Slide.from}
+        durationInFrames={message1Slide.durationInFrames}
+      >
         <MessageSlide
-          text={message}
-          durationInFrames={messageSlide.durationInFrames}
+          text={message1}
+          durationInFrames={message1Slide.durationInFrames}
+          hasVideoBackground={hasVideoBackground}
+        />
+      </Sequence>
+      <Sequence
+        from={message2Slide.from}
+        durationInFrames={message2Slide.durationInFrames}
+      >
+        <MessageSlide
+          text={message2}
+          durationInFrames={message2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
       </Sequence>

@@ -42,7 +42,7 @@ const COMPOSITIONS = {
   },
   concept: {
     id: "Concept",
-    requiredFields: ["brand", "hook", "message", "cta"],
+    requiredFields: ["brand", "hook", "message1", "message2", "cta"],
   },
 };
 // Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
