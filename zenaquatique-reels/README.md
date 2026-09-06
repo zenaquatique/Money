@@ -144,10 +144,26 @@ Versus, `CtaSlide` de Top3) ; seul `MessageSlide` est propre à ce format.
 
 Les 4 formats acceptent aussi, en plus de `clips` :
 
-- `voiceoverUrl?: string` — fourni par l'appelant (Make). Un chemin relatif à
-  `public/` ou une URL `http(s)://` complète. Démarre à la frame 0 (en même
-  temps que le Hook), volume 100%. Absent/vide → vidéo silencieuse pour la
-  voix off, sans erreur, comme avant.
+- `voiceovers?: { [slide]: string }` — fourni par l'appelant (Make), un
+  fichier audio par sous-titre. Les clés attendues dépendent du format
+  (chemins relatifs à `public/` ou URLs `http(s)://` complètes, chaque clé
+  optionnelle) :
+  - Versus : `hook`, `optionA`, `optionB`, `verdict` (et `cta` en secours si
+    `verdict` est absent — Versus n'a pas de slide CTA séparée, le CTA est
+    intégré à la slide Verdict)
+  - Top3 : `hook`, `produit1`, `produit2`, `produit3`, `benefices`, `cta`
+  - Educatif : `hook`, `conseil1`, `conseil2`, `conseil3`, `cta`
+  - Concept : `hook`, `message1`, `message2`, `cta`
+
+  Chaque slide dont la clé est fournie est chronométrée sur la durée réelle
+  de son fichier audio (+ une marge de 0.15s pour la lisibilité du texte),
+  et son voiceover démarre pile avec sa slide — bout à bout, sans blanc ni
+  chevauchement, à partir de la frame 0 pour `hook`. La durée totale de la
+  vidéo s'ajuste automatiquement à la somme des slides. Une clé absente
+  garde le comportement par défaut (durée fixe du format, ou
+  `durationsInSeconds` si fourni) pour cette slide, sans erreur ni casser
+  les autres. `voiceovers` absent ou vide → comportement identique à avant
+  (durée fixe, vidéo silencieuse pour la voix off) sur toutes les slides.
 
 La musique de fond, elle, n'est **pas** un champ à envoyer : à chaque rendu,
 `server/render-server.js` pioche automatiquement un fichier dans

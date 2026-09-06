@@ -140,9 +140,24 @@ app.post("/render", async (req, res) => {
     }
   }
 
-  if (inputProps.voiceoverUrl !== undefined && typeof inputProps.voiceoverUrl !== "string") {
-    res.status(400).json({ error: "Le champ voiceoverUrl doit être une chaîne." });
-    return;
+  if (inputProps.voiceovers !== undefined) {
+    if (
+      typeof inputProps.voiceovers !== "object" ||
+      inputProps.voiceovers === null ||
+      Array.isArray(inputProps.voiceovers)
+    ) {
+      res.status(400).json({ error: "Le champ voiceovers doit être un objet." });
+      return;
+    }
+    const badKey = Object.entries(inputProps.voiceovers).find(
+      ([, url]) => typeof url !== "string" || !url,
+    );
+    if (badKey) {
+      res.status(400).json({
+        error: `Le champ voiceovers.${badKey[0]} doit être une chaîne non vide.`,
+      });
+      return;
+    }
   }
 
   // Fresh per request unless the caller explicitly passed one (e.g. for a

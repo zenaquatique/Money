@@ -5,6 +5,7 @@ import { BackgroundVideoLayer } from "../Versus/BackgroundVideoLayer";
 import { colors } from "../Versus/colors";
 import { planClips } from "../Versus/clips";
 import { HookSlide } from "../Versus/HookSlide";
+import { SlideVoiceover } from "../Versus/SlideVoiceover";
 import { BenefitsSlide } from "./BenefitsSlide";
 import { CtaSlide } from "./CtaSlide";
 import { ProductSlide } from "./ProductSlide";
@@ -22,7 +23,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
   clips,
   durationsInSeconds,
   renderSeed,
-  voiceoverUrl,
+  voiceovers,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -35,7 +36,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
-      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
+      <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}
@@ -50,6 +51,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
       <Sequence
         from={produit1Slide.from}
@@ -62,6 +64,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={produit1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.produit1} />
       </Sequence>
       <Sequence
         from={produit2Slide.from}
@@ -74,6 +77,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={produit2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.produit2} />
       </Sequence>
       <Sequence
         from={produit3Slide.from}
@@ -86,6 +90,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={produit3Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.produit3} />
       </Sequence>
       <Sequence from={benefSlide.from} durationInFrames={benefSlide.durationInFrames}>
         <BenefitsSlide
@@ -93,6 +98,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={benefSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.benefices} />
       </Sequence>
       <Sequence from={ctaSlide.from} durationInFrames={ctaSlide.durationInFrames}>
         <CtaSlide
@@ -101,6 +107,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>
     </AbsoluteFill>
   );

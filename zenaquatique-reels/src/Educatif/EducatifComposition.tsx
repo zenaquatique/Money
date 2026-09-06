@@ -5,6 +5,7 @@ import { BackgroundVideoLayer } from "../Versus/BackgroundVideoLayer";
 import { colors } from "../Versus/colors";
 import { planClips } from "../Versus/clips";
 import { HookSlide } from "../Versus/HookSlide";
+import { SlideVoiceover } from "../Versus/SlideVoiceover";
 import { CtaSlide } from "../Top3/CtaSlide";
 import { TipSlide } from "./TipSlide";
 import { getSlideTimeline, getTotalDurationInFrames, resolveDurations } from "./timing";
@@ -20,7 +21,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
   clips,
   durationsInSeconds,
   renderSeed,
-  voiceoverUrl,
+  voiceovers,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -33,7 +34,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
-      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
+      <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}
@@ -48,6 +49,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
       <Sequence
         from={conseil1Slide.from}
@@ -59,6 +61,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           durationInFrames={conseil1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.conseil1} />
       </Sequence>
       <Sequence
         from={conseil2Slide.from}
@@ -70,6 +73,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           durationInFrames={conseil2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.conseil2} />
       </Sequence>
       <Sequence
         from={conseil3Slide.from}
@@ -81,6 +85,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           durationInFrames={conseil3Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.conseil3} />
       </Sequence>
       <Sequence from={ctaSlide.from} durationInFrames={ctaSlide.durationInFrames}>
         <CtaSlide
@@ -89,6 +94,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>
     </AbsoluteFill>
   );

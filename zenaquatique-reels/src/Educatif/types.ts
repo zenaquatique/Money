@@ -18,6 +18,17 @@ export const DEFAULT_EDUCATIF_DURATIONS_IN_SECONDS: EducatifSlideDurations = {
   cta: 2,
 };
 
+// Per-slide voiceover clips, provided by Make. Any key can be omitted —
+// that slide then keeps its default (or explicit durationsInSeconds)
+// duration instead of being timed from real audio.
+export type EducatifVoiceovers = Partial<{
+  hook: string;
+  conseil1: string;
+  conseil2: string;
+  conseil3: string;
+  cta: string;
+}>;
+
 export type EducatifProps = {
   brand: string;
   hook: string;
@@ -35,10 +46,13 @@ export type EducatifProps = {
   // per clip each time, while staying identical across every frame of
   // this one render. Not meant to be set by callers (Make).
   renderSeed?: string;
-  // Voiceover audio, provided by Make. Optional — omit/empty for a
-  // silent render (no crash, same output as before this existed).
-  // Starts at frame 0, alongside the Hook's text.
-  voiceoverUrl?: string;
+  // Per-slide voiceovers, provided by Make. Optional as a whole (and
+  // per-key) — any slide without a matching voiceover keeps its default
+  // timing, no crash either way. When present, each slide's real audio
+  // duration (+ a small margin) drives that slide's own duration, and
+  // the composition's total length adjusts to match automatically (see
+  // calculateEducatifMetadata in Root.tsx).
+  voiceovers?: EducatifVoiceovers;
   // Internal: background music, picked and probed by
   // server/render-server.js from public/audio/music/. Not meant to be
   // set by callers (Make) — absent when that folder is empty/missing.

@@ -5,6 +5,7 @@ import { BackgroundVideoLayer } from "../Versus/BackgroundVideoLayer";
 import { colors } from "../Versus/colors";
 import { planClips } from "../Versus/clips";
 import { HookSlide } from "../Versus/HookSlide";
+import { SlideVoiceover } from "../Versus/SlideVoiceover";
 import { CtaSlide } from "../Top3/CtaSlide";
 import { MessageSlide } from "./MessageSlide";
 import { getSlideTimeline, getTotalDurationInFrames, resolveDurations } from "./timing";
@@ -19,7 +20,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   clips,
   durationsInSeconds,
   renderSeed,
-  voiceoverUrl,
+  voiceovers,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -32,7 +33,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
-      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
+      <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}
@@ -47,6 +48,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
       <Sequence
         from={message1Slide.from}
@@ -57,6 +59,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           durationInFrames={message1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.message1} />
       </Sequence>
       <Sequence
         from={message2Slide.from}
@@ -67,6 +70,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           durationInFrames={message2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.message2} />
       </Sequence>
       <Sequence from={ctaSlide.from} durationInFrames={ctaSlide.durationInFrames}>
         <CtaSlide
@@ -75,6 +79,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>
     </AbsoluteFill>
   );

@@ -4,6 +4,7 @@ import { AudioLayer } from "./AudioLayer";
 import { BackgroundVideoLayer } from "./BackgroundVideoLayer";
 import { HookSlide } from "./HookSlide";
 import { OptionSlide } from "./OptionSlide";
+import { SlideVoiceover } from "./SlideVoiceover";
 import { colors } from "./colors";
 import { planClips } from "./clips";
 import { getSlideTimeline, getTotalDurationInFrames, resolveDurations } from "./timing";
@@ -20,7 +21,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
   clips,
   durationsInSeconds,
   renderSeed,
-  voiceoverUrl,
+  voiceovers,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -33,7 +34,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
-      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
+      <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}
@@ -48,6 +49,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
       <Sequence
         from={optionASlide.from}
@@ -60,6 +62,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={optionASlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.optionA} />
       </Sequence>
       <Sequence
         from={optionBSlide.from}
@@ -72,6 +75,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={optionBSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.optionB} />
       </Sequence>
       <Sequence
         from={verdictSlide.from}
@@ -84,6 +88,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={verdictSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
+        <SlideVoiceover url={voiceovers?.verdict ?? voiceovers?.cta} />
       </Sequence>
     </AbsoluteFill>
   );

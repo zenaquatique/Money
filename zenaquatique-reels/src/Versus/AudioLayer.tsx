@@ -1,44 +1,27 @@
 import React, { useEffect, useState } from "react";
-import {
-  Audio,
-  continueRender,
-  delayRender,
-  Loop,
-  staticFile,
-  useVideoConfig,
-} from "remotion";
+import { Audio, continueRender, delayRender, Loop, useVideoConfig } from "remotion";
 import { getAudioDurationInSeconds } from "@remotion/media-utils";
+import { resolveMediaSrc } from "./resolveMediaSrc";
 
 // Music must never cover the voiceover. Keep it in the 0.15-0.20 range.
 export const MUSIC_VOLUME = 0.18;
-const VOICEOVER_VOLUME = 1;
-
-const resolveSrc = (src: string): string =>
-  /^https?:\/\//.test(src) ? src : staticFile(src);
 
 export type MusicTrack = {
   src: string;
 };
 
-// Voiceover (if any) starts at frame 0, alongside the first subtitle, and
-// plays at full volume. Background music (if any) is picked server-side
-// (see server/render-server.js — it lists public/audio/music/, since a
+// Background music (if any) is picked server-side (see
+// server/render-server.js — it lists public/audio/music/, since a
 // composition has no filesystem access) and loops for the whole video at
-// MUSIC_VOLUME. Renders nothing for whichever of the two is absent — safe
-// to use on every composition regardless of whether Make sent audio for
-// this render.
+// MUSIC_VOLUME. Renders nothing when absent — safe to use on every
+// composition regardless of whether a music track was picked for this
+// render. Per-slide voiceover playback lives next to each slide's own
+// <Sequence> instead (see SlideVoiceover.tsx) since it needs to be
+// scoped to that slide's frame range, not the whole video.
 export const AudioLayer: React.FC<{
-  voiceoverUrl?: string;
   musicTrack?: MusicTrack;
-}> = ({ voiceoverUrl, musicTrack }) => {
-  return (
-    <>
-      {voiceoverUrl ? (
-        <Audio src={resolveSrc(voiceoverUrl)} volume={VOICEOVER_VOLUME} />
-      ) : null}
-      {musicTrack ? <MusicLayer track={musicTrack} /> : null}
-    </>
-  );
+}> = ({ musicTrack }) => {
+  return musicTrack ? <MusicLayer track={musicTrack} /> : null;
 };
 
 // Remotion's own compositor (used server-side to probe rush clip
@@ -83,7 +66,7 @@ const useAudioDurationInSeconds = (src: string): number | undefined => {
 
 const MusicLayer: React.FC<{ track: MusicTrack }> = ({ track }) => {
   const { fps } = useVideoConfig();
-  const src = resolveSrc(track.src);
+  const src = resolveMediaSrc(track.src);
   const durationInSeconds = useAudioDurationInSeconds(src);
 
   if (durationInSeconds && durationInSeconds > 0) {

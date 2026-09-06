@@ -32,6 +32,21 @@ export type VersusOption = {
   text: string;
 };
 
+// Per-slide voiceover clips, provided by Make. Any key can be omitted —
+// that slide then keeps its default (or explicit durationsInSeconds)
+// duration instead of being timed from real audio. Versus has no
+// separate CTA slide (the CTA text lives inside the Verdict slide), so
+// `cta` is accepted as a fallback for `verdict` when `verdict` itself is
+// absent: whichever of the two is provided drives the Verdict slide's
+// voiceover and timing.
+export type VersusVoiceovers = Partial<{
+  hook: string;
+  optionA: string;
+  optionB: string;
+  verdict: string;
+  cta: string;
+}>;
+
 export type VersusProps = {
   brand: string;
   hook: string;
@@ -52,10 +67,13 @@ export type VersusProps = {
   // per clip each time, while staying identical across every frame of
   // this one render. Not meant to be set by callers (Make).
   renderSeed?: string;
-  // Voiceover audio, provided by Make. Optional — omit/empty for a
-  // silent render (no crash, same output as before this existed).
-  // Starts at frame 0, alongside the Hook's text.
-  voiceoverUrl?: string;
+  // Per-slide voiceovers, provided by Make. Optional as a whole (and
+  // per-key) — any slide without a matching voiceover keeps its default
+  // timing, no crash either way. When present, each slide's real audio
+  // duration (+ a small margin) drives that slide's own duration, and
+  // the composition's total length adjusts to match automatically (see
+  // calculateVersusMetadata in Root.tsx).
+  voiceovers?: VersusVoiceovers;
   // Internal: background music, picked and probed by
   // server/render-server.js from public/audio/music/. Not meant to be
   // set by callers (Make) — absent when that folder is empty/missing.
