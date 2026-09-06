@@ -29,23 +29,25 @@ import { resolveSegmentDurationsInSeconds } from "./Versus/voiceoverTimeline";
 
 const FPS = 30;
 
-// Each slide's duration comes from its real voiceover clip when Make
-// provided one (see resolveSegmentDurationsInSeconds), otherwise from the
-// format's static defaults/explicit durationsInSeconds override — same
-// as before voiceovers existed. Either way the resolved seconds are fed
-// back to the component as `durationsInSeconds`, so VersusComposition
-// (etc.) doesn't need to know or care whether a given value came from a
-// voiceover probe or a static default.
-const calculateVersusMetadata: CalculateMetadataFunction<VersusProps> = async ({
+// Each slide's duration comes from its real voiceover's probed duration
+// (props.voiceoverDurations, computed server-side — see
+// resolveSegmentDurationsInSeconds and server/render-server.js) when Make
+// provided a voiceover for it, otherwise from the format's static
+// defaults/explicit durationsInSeconds override — same as before
+// voiceovers existed. Either way the resolved seconds are fed back to the
+// component as `durationsInSeconds`, so VersusComposition (etc.) doesn't
+// need to know or care whether a given value came from a voiceover or a
+// static default.
+const calculateVersusMetadata: CalculateMetadataFunction<VersusProps> = ({
   props,
 }) => {
   const baseline = resolveDurations(props.durationsInSeconds);
-  const durationsInSeconds = await resolveSegmentDurationsInSeconds(
+  const durationsInSeconds = resolveSegmentDurationsInSeconds(
     {
-      hook: props.voiceovers?.hook,
-      optionA: props.voiceovers?.optionA,
-      optionB: props.voiceovers?.optionB,
-      verdict: props.voiceovers?.verdict ?? props.voiceovers?.cta,
+      hook: props.voiceoverDurations?.hook,
+      optionA: props.voiceoverDurations?.optionA,
+      optionB: props.voiceoverDurations?.optionB,
+      verdict: props.voiceoverDurations?.verdict ?? props.voiceoverDurations?.cta,
     },
     baseline,
   );
@@ -58,18 +60,18 @@ const calculateVersusMetadata: CalculateMetadataFunction<VersusProps> = async ({
   };
 };
 
-const calculateTop3Metadata: CalculateMetadataFunction<Top3Props> = async ({
+const calculateTop3Metadata: CalculateMetadataFunction<Top3Props> = ({
   props,
 }) => {
   const baseline = resolveTop3Durations(props.durationsInSeconds);
-  const durationsInSeconds = await resolveSegmentDurationsInSeconds(
+  const durationsInSeconds = resolveSegmentDurationsInSeconds(
     {
-      hook: props.voiceovers?.hook,
-      produit1: props.voiceovers?.produit1,
-      produit2: props.voiceovers?.produit2,
-      produit3: props.voiceovers?.produit3,
-      benefices: props.voiceovers?.benefices,
-      cta: props.voiceovers?.cta,
+      hook: props.voiceoverDurations?.hook,
+      produit1: props.voiceoverDurations?.produit1,
+      produit2: props.voiceoverDurations?.produit2,
+      produit3: props.voiceoverDurations?.produit3,
+      benefices: props.voiceoverDurations?.benefices,
+      cta: props.voiceoverDurations?.cta,
     },
     baseline,
   );
@@ -82,17 +84,17 @@ const calculateTop3Metadata: CalculateMetadataFunction<Top3Props> = async ({
   };
 };
 
-const calculateEducatifMetadata: CalculateMetadataFunction<EducatifProps> = async ({
+const calculateEducatifMetadata: CalculateMetadataFunction<EducatifProps> = ({
   props,
 }) => {
   const baseline = resolveEducatifDurations(props.durationsInSeconds);
-  const durationsInSeconds = await resolveSegmentDurationsInSeconds(
+  const durationsInSeconds = resolveSegmentDurationsInSeconds(
     {
-      hook: props.voiceovers?.hook,
-      conseil1: props.voiceovers?.conseil1,
-      conseil2: props.voiceovers?.conseil2,
-      conseil3: props.voiceovers?.conseil3,
-      cta: props.voiceovers?.cta,
+      hook: props.voiceoverDurations?.hook,
+      conseil1: props.voiceoverDurations?.conseil1,
+      conseil2: props.voiceoverDurations?.conseil2,
+      conseil3: props.voiceoverDurations?.conseil3,
+      cta: props.voiceoverDurations?.cta,
     },
     baseline,
   );
@@ -105,16 +107,16 @@ const calculateEducatifMetadata: CalculateMetadataFunction<EducatifProps> = asyn
   };
 };
 
-const calculateConceptMetadata: CalculateMetadataFunction<ConceptProps> = async ({
+const calculateConceptMetadata: CalculateMetadataFunction<ConceptProps> = ({
   props,
 }) => {
   const baseline = resolveConceptDurations(props.durationsInSeconds);
-  const durationsInSeconds = await resolveSegmentDurationsInSeconds(
+  const durationsInSeconds = resolveSegmentDurationsInSeconds(
     {
-      hook: props.voiceovers?.hook,
-      message1: props.voiceovers?.message1,
-      message2: props.voiceovers?.message2,
-      cta: props.voiceovers?.cta,
+      hook: props.voiceoverDurations?.hook,
+      message1: props.voiceoverDurations?.message1,
+      message2: props.voiceoverDurations?.message2,
+      cta: props.voiceoverDurations?.cta,
     },
     baseline,
   );

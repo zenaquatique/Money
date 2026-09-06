@@ -51,6 +51,10 @@ const COMPOSITIONS = {
 };
 // Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
 const MAX_CLIPS = 3;
+// Small readability margin added on top of each voiceover's real duration
+// (same value used before this moved server-side — see
+// src/Versus/voiceoverTimeline.ts for how it's consumed).
+const VOICEOVER_MARGIN_SECONDS = 0.15;
 
 let bundleLocationPromise = null;
 const getBundleLocation = () => {
@@ -59,6 +63,69 @@ const getBundleLocation = () => {
     bundleLocationPromise = bundle({ entryPoint: ENTRY_POINT });
   }
   return bundleLocationPromise;
+};
+
+// music-metadata is ESM-only; this file is CommonJS, so it's loaded via a
+// cached dynamic import (same one-time-cost pattern as getBundleLocation
+// above).
+let musicMetadataPromise = null;
+const getMusicMetadata = () => {
+  if (!musicMetadataPromise) {
+    musicMetadataPromise = import("music-metadata");
+  }
+  return musicMetadataPromise;
+};
+
+// Reads a single voiceover file's real duration, server-side (Node), before
+// the render starts. This used to run in the browser via
+// getAudioDurationInSeconds (@remotion/media-utils), but Chromium's ORB
+// (Opaque Response Blocking) protection blocks cross-origin audio fetches
+// to hosts like Google Drive ("net::ERR_BLOCKED_BY_ORB" / "MEDIA_ELEMENT_
+// ERROR: Format error") — Node's own fetch isn't subject to that
+// browser-only protection, so probing here sidesteps it entirely.
+const probeAudioDurationInSeconds = async (src) => {
+  const { parseBuffer, parseFile } = await getMusicMetadata();
+  if (/^https?:\/\//.test(src)) {
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} en téléchargeant ${src}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const metadata = await parseBuffer(buffer, response.headers.get("content-type") || undefined);
+    return metadata.format.duration;
+  }
+  const metadata = await parseFile(path.join(PUBLIC_DIR, src));
+  return metadata.format.duration;
+};
+
+// Probes every present voiceovers[key] file, returning
+// { [key]: durationInSeconds } (real duration + reading margin) for the
+// keys that succeeded. A key whose download/parse fails is simply omitted
+// — the composition then falls back to that slide's default duration
+// instead of the whole render failing. Returns undefined when voiceovers
+// itself is absent/empty, same "no error, just less precise" contract as
+// the rest of this file's best-effort probing (see clip duration probing
+// below).
+const probeVoiceoverDurations = async (voiceovers) => {
+  if (!voiceovers || Object.keys(voiceovers).length === 0) {
+    return undefined;
+  }
+  const entries = await Promise.all(
+    Object.entries(voiceovers).map(async ([key, src]) => {
+      try {
+        const duration = await probeAudioDurationInSeconds(src);
+        return [key, duration + VOICEOVER_MARGIN_SECONDS];
+      } catch (error) {
+        console.warn(
+          `Impossible de lire la durée de la voix off "${key}" (${src}):`,
+          error.message || error,
+        );
+        return [key, undefined];
+      }
+    }),
+  );
+  const durations = Object.fromEntries(entries.filter(([, duration]) => duration !== undefined));
+  return Object.keys(durations).length > 0 ? durations : undefined;
 };
 
 // Picks one file from public/audio/music/ deterministically from `seed`
@@ -174,21 +241,30 @@ app.post("/render", async (req, res) => {
   // decide whether a clip is long enough to need a random start point.
   // Remote (http/https) clips are left as-is — probing them would need a
   // download first — so they always start at frame 0, same as before.
-  if (Array.isArray(inputProps.clips)) {
-    await Promise.all(
-      inputProps.clips.map(async (clip) => {
-        if (/^https?:\/\//.test(clip.src)) {
-          return;
-        }
-        try {
-          const metadata = await getVideoMetadata(path.join(PUBLIC_DIR, clip.src));
-          clip.durationInSeconds = metadata.durationInSeconds;
-        } catch (error) {
-          console.warn(`Impossible de lire la durée de ${clip.src}:`, error.message || error);
-        }
-      }),
-    );
-  }
+  //
+  // Runs concurrently with the voiceover duration probing below — neither
+  // depends on the other's result.
+  const clipsProbe = Array.isArray(inputProps.clips)
+    ? Promise.all(
+        inputProps.clips.map(async (clip) => {
+          if (/^https?:\/\//.test(clip.src)) {
+            return;
+          }
+          try {
+            const metadata = await getVideoMetadata(path.join(PUBLIC_DIR, clip.src));
+            clip.durationInSeconds = metadata.durationInSeconds;
+          } catch (error) {
+            console.warn(`Impossible de lire la durée de ${clip.src}:`, error.message || error);
+          }
+        }),
+      )
+    : Promise.resolve();
+
+  const [, voiceoverDurations] = await Promise.all([
+    clipsProbe,
+    probeVoiceoverDurations(inputProps.voiceovers),
+  ]);
+  inputProps.voiceoverDurations = voiceoverDurations;
 
   // Background music: pick one file from public/audio/music/ (same seed
   // as above, namespaced separately) — that's as far as the server goes.

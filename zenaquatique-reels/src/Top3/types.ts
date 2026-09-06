@@ -62,6 +62,14 @@ export type Top3Props = {
   // the composition's total length adjusts to match automatically (see
   // calculateTop3Metadata in Root.tsx).
   voiceovers?: Top3Voiceovers;
+  // Internal: real duration (in seconds, already including the reading
+  // margin) of each voiceovers[key] file, probed server-side by
+  // server/render-server.js before the render starts — browser-side
+  // probing hits Chromium's ORB protection on hosts like Google Drive, so
+  // it's done in Node instead. Not meant to be set by callers (Make); a
+  // key missing here (probe failed, or no voiceover for that slide) falls
+  // back to that slide's default duration.
+  voiceoverDurations?: Partial<Record<keyof Top3Voiceovers, number>>;
   // Internal: background music, picked and probed by
   // server/render-server.js from public/audio/music/. Not meant to be
   // set by callers (Make) — absent when that folder is empty/missing.

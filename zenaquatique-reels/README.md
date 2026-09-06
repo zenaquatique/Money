@@ -179,13 +179,34 @@ Formats de fichier acceptés dans `public/audio/music/` :
 
 **Détail technique** : la durée des rushes vidéo est sondée côté serveur
 (compositor Remotion), mais ce compositor rejette les fichiers audio purs
-("No video stream found") — la durée de la musique est donc sondée côté
+("No video stream found").
+
+Pour les **voix off** (`voiceovers`), cette durée est sondée côté serveur
+également (`server/render-server.js`, fonction `probeVoiceoverDurations`),
+mais avec un outil différent : le package npm `music-metadata` (lit les
+métadonnées audio d'un buffer téléchargé via `fetch`, ou d'un fichier
+local). Le résultat est transmis à la composition via un champ interne
+`voiceoverDurations`, en secondes. Ce sondage a volontairement lieu côté
+serveur (Node) et **pas** dans le navigateur : Chromium (utilisé par
+Remotion pour le rendu) bloque par sa protection ORB (Opaque Response
+Blocking) les requêtes audio cross-origin vers des hébergeurs comme Google
+Drive (`net::ERR_BLOCKED_BY_ORB`), ce qui faisait planter le rendu quand
+cette même durée était sondée côté navigateur (ancienne approche, comme
+pour la musique ci-dessous). `fetch` côté Node n'est pas soumis à cette
+protection — d'où le déplacement. Un fichier dont le téléchargement ou la
+lecture échoue est simplement ignoré (log d'avertissement) : la slide
+concernée retombe sur sa durée par défaut, sans faire planter le reste du
+rendu.
+
+Pour la **musique de fond**, la durée est en revanche toujours sondée côté
 navigateur, au moment du rendu, via `getAudioDurationInSeconds` de
-`@remotion/media-utils` (le seul outil Remotion qui gère l'audio pur ;
-`getVideoMetadata`, côté serveur comme côté navigateur, échoue aussi sur
-l'audio pur). Si ce sondage échoue, le morceau choisi joue une fois sans
-boucler plutôt que de risquer un point de boucle incorrect — jamais
-d'erreur de rendu dans tous les cas.
+`@remotion/media-utils` (`getVideoMetadata`, côté serveur comme côté
+navigateur, échoue aussi sur l'audio pur) — ce qui reste possible sans
+souci ici car les fichiers de musique sont servis localement depuis
+`public/`, donc en same-origin avec la page de rendu (pas de restriction
+ORB, celle-ci ne visant que les requêtes cross-origin). Si ce sondage
+échoue, le morceau choisi joue une fois sans boucler plutôt que de risquer
+un point de boucle incorrect — jamais d'erreur de rendu dans tous les cas.
 
 ## Qualité de rendu (netteté)
 

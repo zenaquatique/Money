@@ -12,6 +12,7 @@
     "@remotion/renderer": "^4.0.520",
     "@remotion/tailwind-v4": "4.0.520",
     "express": "^5.2.1",
+    "music-metadata": "^11.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.520",
