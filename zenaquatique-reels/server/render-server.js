@@ -3,11 +3,12 @@ const os = require("os");
 const path = require("path");
 const express = require("express");
 const { bundle } = require("@remotion/bundler");
-const { renderMedia, selectComposition } = require("@remotion/renderer");
+const { renderMedia, selectComposition, getVideoMetadata } = require("@remotion/renderer");
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.RENDER_API_KEY;
 const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const DEFAULT_FORMAT = "versus";
 // Which Remotion composition to render per "format" value, and the fields
 // each one requires. "format" is absent → DEFAULT_FORMAT, unchanged from
@@ -110,6 +111,36 @@ app.post("/render", async (req, res) => {
       res.status(400).json({ error: "Chaque élément de clips doit avoir un champ src (chaîne non vide)." });
       return;
     }
+  }
+
+  // Fresh per request unless the caller explicitly passed one (e.g. for a
+  // reproducible test render) — lets BackgroundVideoLayer pick a different
+  // random start point in each rush clip on every render.
+  if (!inputProps.renderSeed) {
+    inputProps.renderSeed = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  // Look up each local clip's real duration once, server-side, via
+  // Remotion's own compositor (the same decoder OffthreadVideo uses at
+  // render time — unlike the browser's native <video> element, it isn't
+  // picky about encoding quirks). BackgroundVideoLayer uses this to
+  // decide whether a clip is long enough to need a random start point.
+  // Remote (http/https) clips are left as-is — probing them would need a
+  // download first — so they always start at frame 0, same as before.
+  if (Array.isArray(inputProps.clips)) {
+    await Promise.all(
+      inputProps.clips.map(async (clip) => {
+        if (/^https?:\/\//.test(clip.src)) {
+          return;
+        }
+        try {
+          const metadata = await getVideoMetadata(path.join(PUBLIC_DIR, clip.src));
+          clip.durationInSeconds = metadata.durationInSeconds;
+        } catch (error) {
+          console.warn(`Impossible de lire la durée de ${clip.src}:`, error.message || error);
+        }
+      }),
+    );
   }
 
   let outputPath;

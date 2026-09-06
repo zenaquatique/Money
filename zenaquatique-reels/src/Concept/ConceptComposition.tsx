@@ -17,6 +17,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   cta,
   clips,
   durationsInSeconds,
+  renderSeed,
 }) => {
   const { fps } = useVideoConfig();
   const durations = resolveDurations(durationsInSeconds);
@@ -33,6 +34,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
         tailClip={tailClip}
         hookDurationInFrames={hookSlide.durationInFrames}
         totalDurationInFrames={totalDurationInFrames}
+        seed={renderSeed ?? "static-seed"}
       />
       <Sequence from={hookSlide.from} durationInFrames={hookSlide.durationInFrames}>
         <HookSlide

@@ -29,4 +29,9 @@ export type ConceptProps = {
   // a text-only render.
   clips?: VersusClip[];
   durationsInSeconds?: Partial<ConceptSlideDurations>;
+  // Internal: set by server/render-server.js to a fresh value on every
+  // render so BackgroundVideoLayer picks a different random start point
+  // per clip each time, while staying identical across every frame of
+  // this one render. Not meant to be set by callers (Make).
+  renderSeed?: string;
 };

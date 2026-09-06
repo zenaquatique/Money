@@ -70,6 +70,17 @@ moteur de rendu — reconvertis-le d'abord en H.264 :
 ffmpeg -i rush.mov -c:v libx264 -pix_fmt yuv420p -c:a aac rush.mp4
 ```
 
+**Point de départ aléatoire dans un rush trop long** : si un fichier local
+(`clips[].src` relatif à `public/`) dure plus longtemps que le segment où il
+est utilisé, le rendu démarre à un point aléatoire du fichier plutôt que
+toujours au début — pour varier ce qui est montré si le même rush est
+réutilisé sur plusieurs générations. `server/render-server.js` lit la durée
+réelle de chaque clip local avant le rendu (via `getVideoMetadata` de
+`@remotion/renderer`) ; si le fichier est plus court ou égal au segment,
+ou si sa durée n'a pas pu être lue, le comportement reste inchangé (départ
+à 0). Cette lecture de durée ne s'applique qu'aux fichiers locaux — un
+`clips[].src` en URL `http(s)://` démarre toujours à 0.
+
 ## Format "Top3"
 
 Composition `Top3` (`src/Top3/`) génère des Reels verticaux (1080×1920,

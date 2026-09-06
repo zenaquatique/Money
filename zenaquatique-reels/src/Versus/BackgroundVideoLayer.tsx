@@ -1,5 +1,12 @@
 import React from "react";
-import { AbsoluteFill, OffthreadVideo, Sequence, staticFile } from "remotion";
+import {
+  AbsoluteFill,
+  OffthreadVideo,
+  random,
+  Sequence,
+  staticFile,
+  useVideoConfig,
+} from "remotion";
 import type { VersusClip } from "./types";
 
 const resolveClipSrc = (src: string): string =>
@@ -11,6 +18,42 @@ const coverStyle: React.CSSProperties = {
   objectFit: "cover",
 };
 
+// Renders one background clip, starting at a random point in the source
+// when it's longer than the slot it fills — so the same rush doesn't
+// always show its first N seconds on every render. `clip.durationInSeconds`
+// is looked up server-side (server/render-server.js, via Remotion's own
+// compositor — the same decoder OffthreadVideo itself uses) before the
+// render starts, so it's a plain synchronous prop here, not fetched in
+// the browser. The random point is derived from `seed` (fresh per
+// render) via Remotion's deterministic random(), so every frame agrees
+// on the same start point instead of drifting frame to frame.
+const ClipVideo: React.FC<{
+  clip: VersusClip;
+  allocatedDurationInFrames: number;
+  seed: string;
+}> = ({ clip, allocatedDurationInFrames, seed }) => {
+  const { fps } = useVideoConfig();
+  const src = resolveClipSrc(clip.src);
+
+  let trimBefore = 0;
+  if (clip.durationInSeconds !== undefined) {
+    const clipDurationInFrames = Math.floor(clip.durationInSeconds * fps);
+    const maxStart = clipDurationInFrames - allocatedDurationInFrames;
+    if (maxStart > 0) {
+      trimBefore = Math.floor(random(`${seed}:${clip.src}`) * (maxStart + 1));
+    }
+  }
+
+  return (
+    <OffthreadVideo
+      src={src}
+      muted
+      style={coverStyle}
+      trimBefore={trimBefore}
+    />
+  );
+};
+
 // Renders the clip timeline for one Versus render: 1-2 short intro clips
 // shown back to back during the Hook, then a single longer clip playing
 // continuously behind the rest of the video. Renders nothing (falls back
@@ -20,7 +63,14 @@ export const BackgroundVideoLayer: React.FC<{
   tailClip: VersusClip | undefined;
   hookDurationInFrames: number;
   totalDurationInFrames: number;
-}> = ({ introClips, tailClip, hookDurationInFrames, totalDurationInFrames }) => {
+  seed: string;
+}> = ({
+  introClips,
+  tailClip,
+  hookDurationInFrames,
+  totalDurationInFrames,
+  seed,
+}) => {
   if (!tailClip) {
     return null;
   }
@@ -45,10 +95,10 @@ export const BackgroundVideoLayer: React.FC<{
             from={from}
             durationInFrames={durationInFrames}
           >
-            <OffthreadVideo
-              src={resolveClipSrc(clip.src)}
-              muted
-              style={coverStyle}
+            <ClipVideo
+              clip={clip}
+              allocatedDurationInFrames={durationInFrames}
+              seed={`${seed}:intro:${index}`}
             />
           </Sequence>
         );
@@ -57,10 +107,10 @@ export const BackgroundVideoLayer: React.FC<{
         from={hookDurationInFrames}
         durationInFrames={totalDurationInFrames - hookDurationInFrames}
       >
-        <OffthreadVideo
-          src={resolveClipSrc(tailClip.src)}
-          muted
-          style={coverStyle}
+        <ClipVideo
+          clip={tailClip}
+          allocatedDurationInFrames={totalDurationInFrames - hookDurationInFrames}
+          seed={`${seed}:tail`}
         />
       </Sequence>
     </AbsoluteFill>

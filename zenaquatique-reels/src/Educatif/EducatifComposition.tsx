@@ -18,6 +18,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
   cta,
   clips,
   durationsInSeconds,
+  renderSeed,
 }) => {
   const { fps } = useVideoConfig();
   const durations = resolveDurations(durationsInSeconds);
@@ -34,6 +35,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
         tailClip={tailClip}
         hookDurationInFrames={hookSlide.durationInFrames}
         totalDurationInFrames={totalDurationInFrames}
+        seed={renderSeed ?? "static-seed"}
       />
       <Sequence from={hookSlide.from} durationInFrames={hookSlide.durationInFrames}>
         <HookSlide

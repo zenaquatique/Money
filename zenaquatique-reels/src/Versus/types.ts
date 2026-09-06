@@ -16,6 +16,13 @@ export const DEFAULT_VERSUS_DURATIONS_IN_SECONDS: VersusSlideDurations = {
 export type VersusClip = {
   src: string;
   label?: string;
+  // Internal: filled in by server/render-server.js (via Remotion's own
+  // getVideoMetadata, run once server-side before rendering) when it can
+  // determine the source file's real duration. BackgroundVideoLayer uses
+  // it to pick a random start point when the clip is longer than the
+  // slot it fills; left undefined (start at frame 0) for remote URLs or
+  // when the probe fails. Not meant to be set by callers (Make).
+  durationInSeconds?: number;
 };
 
 export type VersusOption = {
@@ -38,4 +45,9 @@ export type VersusProps = {
   // text-only render on a solid background.
   clips?: VersusClip[];
   durationsInSeconds?: Partial<VersusSlideDurations>;
+  // Internal: set by server/render-server.js to a fresh value on every
+  // render so BackgroundVideoLayer picks a different random start point
+  // per clip each time, while staying identical across every frame of
+  // this one render. Not meant to be set by callers (Make).
+  renderSeed?: string;
 };
