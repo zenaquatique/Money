@@ -140,6 +140,37 @@ Réutilise les mêmes composants partagés que les autres formats
 (`SlideFrame`, `colors`, `BackgroundVideoLayer`, `clips.ts`, `HookSlide` de
 Versus, `CtaSlide` de Top3) ; seul `MessageSlide` est propre à ce format.
 
+## Voix off et musique de fond (`AudioLayer`)
+
+Les 4 formats acceptent aussi, en plus de `clips` :
+
+- `voiceoverUrl?: string` — fourni par l'appelant (Make). Un chemin relatif à
+  `public/` ou une URL `http(s)://` complète. Démarre à la frame 0 (en même
+  temps que le Hook), volume 100%. Absent/vide → vidéo silencieuse pour la
+  voix off, sans erreur, comme avant.
+
+La musique de fond, elle, n'est **pas** un champ à envoyer : à chaque rendu,
+`server/render-server.js` pioche automatiquement un fichier dans
+`public/audio/music/` (liste le dossier, choix déterministe via le même
+`renderSeed` que pour les rushes vidéo — donc un `renderSeed` réutilisé
+donne le même choix, un `renderSeed` frais varie), le joue en boucle sur
+toute la durée de la vidéo à volume 18% (`MUSIC_VOLUME` dans
+`src/Versus/AudioLayer.tsx`, entre 15% et 20% pour ne jamais couvrir la
+voix off). Dossier vide/introuvable → pas de musique, sans erreur.
+
+Formats de fichier acceptés dans `public/audio/music/` :
+`.mp3`, `.wav`, `.m4a`, `.aac`, `.ogg`, `.flac`.
+
+**Détail technique** : la durée des rushes vidéo est sondée côté serveur
+(compositor Remotion), mais ce compositor rejette les fichiers audio purs
+("No video stream found") — la durée de la musique est donc sondée côté
+navigateur, au moment du rendu, via `getAudioDurationInSeconds` de
+`@remotion/media-utils` (le seul outil Remotion qui gère l'audio pur ;
+`getVideoMetadata`, côté serveur comme côté navigateur, échoue aussi sur
+l'audio pur). Si ce sondage échoue, le morceau choisi joue une fois sans
+boucler plutôt que de risquer un point de boucle incorrect — jamais
+d'erreur de rendu dans tous les cas.
+
 ## Qualité de rendu (netteté)
 
 `server/render-server.js` appelle `renderMedia` via l'API Node.js de

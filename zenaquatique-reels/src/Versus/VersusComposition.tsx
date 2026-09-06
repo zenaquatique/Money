@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Sequence, useVideoConfig } from "remotion";
+import { AudioLayer } from "./AudioLayer";
 import { BackgroundVideoLayer } from "./BackgroundVideoLayer";
 import { HookSlide } from "./HookSlide";
 import { OptionSlide } from "./OptionSlide";
@@ -19,6 +20,8 @@ export const VersusComposition: React.FC<VersusProps> = ({
   clips,
   durationsInSeconds,
   renderSeed,
+  voiceoverUrl,
+  musicTrack,
 }) => {
   const { fps } = useVideoConfig();
   const durations = resolveDurations(durationsInSeconds);
@@ -30,6 +33,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
+      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}

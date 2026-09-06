@@ -4,11 +4,14 @@ const path = require("path");
 const express = require("express");
 const { bundle } = require("@remotion/bundler");
 const { renderMedia, selectComposition, getVideoMetadata } = require("@remotion/renderer");
+const { random } = require("remotion");
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.RENDER_API_KEY;
 const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
+const MUSIC_DIR = path.join(PUBLIC_DIR, "audio", "music");
+const MUSIC_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const DEFAULT_FORMAT = "versus";
 // Which Remotion composition to render per "format" value, and the fields
 // each one requires. "format" is absent → DEFAULT_FORMAT, unchanged from
@@ -56,6 +59,30 @@ const getBundleLocation = () => {
     bundleLocationPromise = bundle({ entryPoint: ENTRY_POINT });
   }
   return bundleLocationPromise;
+};
+
+// Picks one file from public/audio/music/ deterministically from `seed`
+// (reuses the same renderSeed as the background-clip randomization) —
+// same seed always picks the same track, a fresh seed (the normal case,
+// see renderSeed above) picks independently each render. Returns null
+// when the folder is missing/empty/unreadable, or contains no
+// recognized audio file — callers must treat that as "no music", not
+// an error.
+const pickMusicTrack = (seed) => {
+  let files;
+  try {
+    files = fs.readdirSync(MUSIC_DIR);
+  } catch {
+    return null;
+  }
+  const audioFiles = files
+    .filter((file) => MUSIC_EXTENSIONS.has(path.extname(file).toLowerCase()))
+    .sort();
+  if (audioFiles.length === 0) {
+    return null;
+  }
+  const index = Math.floor(random(`${seed}:music`) * audioFiles.length);
+  return audioFiles[Math.min(index, audioFiles.length - 1)];
 };
 
 const app = express();
@@ -113,6 +140,11 @@ app.post("/render", async (req, res) => {
     }
   }
 
+  if (inputProps.voiceoverUrl !== undefined && typeof inputProps.voiceoverUrl !== "string") {
+    res.status(400).json({ error: "Le champ voiceoverUrl doit être une chaîne." });
+    return;
+  }
+
   // Fresh per request unless the caller explicitly passed one (e.g. for a
   // reproducible test render) — lets BackgroundVideoLayer pick a different
   // random start point in each rush clip on every render.
@@ -141,6 +173,17 @@ app.post("/render", async (req, res) => {
         }
       }),
     );
+  }
+
+  // Background music: pick one file from public/audio/music/ (same seed
+  // as above, namespaced separately) — that's as far as the server goes.
+  // Its duration is probed client-side in AudioLayer (see there for why:
+  // Remotion's compositor, used above for video clips, refuses
+  // audio-only files outright). No file found → musicTrack stays
+  // undefined and AudioLayer simply renders no music.
+  const musicFile = pickMusicTrack(inputProps.renderSeed);
+  if (musicFile) {
+    inputProps.musicTrack = { src: `audio/music/${musicFile}` };
   }
 
   let outputPath;

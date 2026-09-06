@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Sequence, useVideoConfig } from "remotion";
+import { AudioLayer } from "../Versus/AudioLayer";
 import { BackgroundVideoLayer } from "../Versus/BackgroundVideoLayer";
 import { colors } from "../Versus/colors";
 import { planClips } from "../Versus/clips";
@@ -18,6 +19,8 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   clips,
   durationsInSeconds,
   renderSeed,
+  voiceoverUrl,
+  musicTrack,
 }) => {
   const { fps } = useVideoConfig();
   const durations = resolveDurations(durationsInSeconds);
@@ -29,6 +32,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
+      <AudioLayer voiceoverUrl={voiceoverUrl} musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
         tailClip={tailClip}
