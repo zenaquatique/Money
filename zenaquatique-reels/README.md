@@ -191,9 +191,10 @@ La musique de fond, elle, n'est **pas** un champ à envoyer : à chaque rendu,
 `public/audio/music/` (liste le dossier, choix déterministe via le même
 `renderSeed` que pour les rushes vidéo — donc un `renderSeed` réutilisé
 donne le même choix, un `renderSeed` frais varie), le joue en boucle sur
-toute la durée de la vidéo à volume 18% (`MUSIC_VOLUME` dans
-`src/Versus/AudioLayer.tsx`, entre 15% et 20% pour ne jamais couvrir la
-voix off). Dossier vide/introuvable → pas de musique, sans erreur.
+toute la durée de la vidéo à volume 8% (`MUSIC_VOLUME` dans
+`src/Versus/AudioLayer.tsx`) pour rester nettement en retrait et ne jamais
+couvrir la voix off. Dossier vide/introuvable → pas de musique, sans
+erreur.
 
 Formats de fichier acceptés dans `public/audio/music/` :
 `.mp3`, `.wav`, `.m4a`, `.aac`, `.ogg`, `.flac`.

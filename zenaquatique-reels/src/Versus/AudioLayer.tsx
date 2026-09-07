@@ -3,8 +3,8 @@ import { Audio, continueRender, delayRender, Loop, useVideoConfig } from "remoti
 import { getAudioDurationInSeconds } from "@remotion/media-utils";
 import { resolveMediaSrc } from "./resolveMediaSrc";
 
-// Music must never cover the voiceover. Keep it in the 0.15-0.20 range.
-export const MUSIC_VOLUME = 0.18;
+// Music must never cover the voiceover. Keep it clearly in the background.
+export const MUSIC_VOLUME = 0.08;
 
 export type MusicTrack = {
   src: string;
