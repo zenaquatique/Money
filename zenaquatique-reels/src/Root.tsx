@@ -42,12 +42,25 @@ const calculateVersusMetadata: CalculateMetadataFunction<VersusProps> = ({
   props,
 }) => {
   const baseline = resolveDurations(props.durationsInSeconds);
+  const verdictVoiceoverDuration = props.voiceoverDurations?.verdict;
+  const ctaVoiceoverDuration = props.voiceoverDurations?.cta;
   const durationsInSeconds = resolveSegmentDurationsInSeconds(
     {
       hook: props.voiceoverDurations?.hook,
       optionA: props.voiceoverDurations?.optionA,
       optionB: props.voiceoverDurations?.optionB,
-      verdict: props.voiceoverDurations?.verdict ?? props.voiceoverDurations?.cta,
+      // Versus has no separate CTA slide — the CTA text lives inside the
+      // Verdict slide, and when Make sends a *distinct* cta voiceover (as
+      // opposed to using cta as a stand-in when verdict itself is
+      // missing), its audio plays right after the verdict voiceover
+      // within that same slide (see VersusComposition). The slide must
+      // therefore be long enough for both, not just one — summing them
+      // when at least one is present; falls back to the static default
+      // only when neither voiceover was provided at all.
+      verdict:
+        verdictVoiceoverDuration !== undefined || ctaVoiceoverDuration !== undefined
+          ? (verdictVoiceoverDuration ?? 0) + (ctaVoiceoverDuration ?? 0)
+          : undefined,
     },
     baseline,
   );

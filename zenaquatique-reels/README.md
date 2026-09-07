@@ -148,9 +148,15 @@ Les 4 formats acceptent aussi, en plus de `clips` :
   fichier audio par sous-titre. Les clés attendues dépendent du format
   (chemins relatifs à `public/` ou URLs `http(s)://` complètes, chaque clé
   optionnelle) :
-  - Versus : `hook`, `optionA`, `optionB`, `verdict` (et `cta` en secours si
-    `verdict` est absent — Versus n'a pas de slide CTA séparée, le CTA est
-    intégré à la slide Verdict)
+  - Versus : `hook`, `optionA`, `optionB`, `verdict`, `cta` — Versus n'a pas
+    de slide CTA séparée (le CTA est intégré à la slide Verdict, affiché en
+    même temps que le texte du verdict). Si les deux voix off `verdict` et
+    `cta` sont fournies, elles s'enchaînent l'une après l'autre **dans
+    cette même slide** (verdict d'abord, puis cta dès que l'audio du
+    verdict se termine) et la slide dure le temps des deux réunis ; si une
+    seule des deux est fournie, elle joue seule sur toute la slide (`cta`
+    sert alors de voix off pour toute la slide, comme si c'était la seule
+    fournie)
   - Top3 : `hook`, `produit1`, `produit2`, `produit3`, `benefices`, `cta`
   - Educatif : `hook`, `conseil1`, `conseil2`, `conseil3`, `cta`
   - Concept : `hook`, `message1`, `message2`, `cta`

@@ -7,7 +7,12 @@ import { OptionSlide } from "./OptionSlide";
 import { SlideVoiceover } from "./SlideVoiceover";
 import { colors } from "./colors";
 import { planClips } from "./clips";
-import { getSlideTimeline, getTotalDurationInFrames, resolveDurations } from "./timing";
+import {
+  getSlideTimeline,
+  getTotalDurationInFrames,
+  resolveDurations,
+  secondsToFrames,
+} from "./timing";
 import type { VersusProps } from "./types";
 import { VerdictSlide } from "./VerdictSlide";
 
@@ -22,6 +27,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
   durationsInSeconds,
   renderSeed,
   voiceovers,
+  voiceoverDurations,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -31,6 +37,14 @@ export const VersusComposition: React.FC<VersusProps> = ({
   const totalDurationInFrames = getTotalDurationInFrames(durations, fps);
   const { introClips, tailClip } = planClips(clips);
   const hasVideoBackground = tailClip !== undefined;
+  // Versus has no separate CTA slide (see VerdictSlide) — when both a
+  // verdict and a distinct cta voiceover are provided, cta's audio starts
+  // right where verdict's real audio ends, both within this one Sequence
+  // (see calculateVersusMetadata in Root.tsx for why the slide is sized
+  // to fit both). No verdict voiceover → cta starts immediately instead.
+  const ctaVoiceoverOffsetInFrames = voiceovers?.verdict
+    ? secondsToFrames(voiceoverDurations?.verdict ?? 0, fps)
+    : 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
@@ -88,7 +102,12 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={verdictSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
         />
-        <SlideVoiceover url={voiceovers?.verdict ?? voiceovers?.cta} />
+        <SlideVoiceover url={voiceovers?.verdict} />
+        {voiceovers?.cta && (
+          <Sequence from={ctaVoiceoverOffsetInFrames}>
+            <SlideVoiceover url={voiceovers.cta} />
+          </Sequence>
+        )}
       </Sequence>
     </AbsoluteFill>
   );
