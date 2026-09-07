@@ -47,9 +47,10 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 - **Tous les clips sauf le dernier** sont des coupes courtes jouées à la
   suite pendant le Hook (intro dynamique, montage cut).
 - **Le dernier clip** de la liste est le clip long : il joue en continu
-  derrière Option A, Option B et Verdict. Il doit couvrir toute cette durée
-  (~17s par défaut) pour éviter l'effet de gel (image figée) en fin de
-  vidéo — c'est le rôle de l'appelant de fournir un rush assez long ici.
+  derrière Option A, Option B et Verdict, sur toute cette durée (~17s par
+  défaut). Idéalement assez long pour la couvrir en une fois, mais s'il est
+  plus court, il boucle automatiquement (reprend à 0) plutôt que de geler
+  sur sa dernière image — voir plus bas.
 - 2 clips → 1 court + 1 long. 3 clips → 2 courts + 1 long. 1 seul clip → il
   sert à la fois d'intro et de fond continu. Aucun clip → repli sur le fond
   uni de la v1 (texte seul).
@@ -80,6 +81,20 @@ réelle de chaque clip local avant le rendu (via `getVideoMetadata` de
 ou si sa durée n'a pas pu être lue, le comportement reste inchangé (départ
 à 0). Cette lecture de durée ne s'applique qu'aux fichiers locaux — un
 `clips[].src` en URL `http(s)://` démarre toujours à 0.
+
+**Boucle si le rush est trop court** : à l'inverse, si un fichier local dure
+*moins* longtemps que le segment/slide qu'il illustre, `BackgroundVideoLayer`
+le fait boucler (reprend à la frame 0 du fichier, autant de fois que
+nécessaire) plutôt que de le laisser se figer sur sa dernière image une fois
+fini — que ce soit le clip long derrière Option A/B/Verdict, ou un des clips
+courts de l'intro. Le point de redémarrage de la boucle est toujours la
+frame 0 du fichier, pas le point de départ aléatoire éventuel décrit
+ci-dessus (qui ne s'applique qu'au tout premier passage). C'est un cut net
+à chaque reprise (pas de fondu), donc un rush qui boucle proprement (contenu
+qui ne saute pas trop visuellement entre sa dernière et sa première image)
+reste préférable ; ce mécanisme évite juste l'effet de gel, ce n'est pas un
+substitut à un rush bien choisi/assez long. S'applique aux 4 formats, tous
+partagent le même `BackgroundVideoLayer`.
 
 ## Format "Top3"
 

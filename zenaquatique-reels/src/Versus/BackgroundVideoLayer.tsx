@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AbsoluteFill,
+  Loop,
   OffthreadVideo,
   random,
   Sequence,
@@ -27,6 +28,12 @@ const coverStyle: React.CSSProperties = {
 // the browser. The random point is derived from `seed` (fresh per
 // render) via Remotion's deterministic random(), so every frame agrees
 // on the same start point instead of drifting frame to frame.
+//
+// When the rush is *shorter* than the slot instead, OffthreadVideo would
+// simply run out and freeze on its last frame for the remainder — so it's
+// wrapped in <Loop> (same mechanism already used for the background music
+// track, see AudioLayer.tsx) to replay it from frame 0 as many times as
+// needed to fill the slot, instead of ever holding a static frame.
 const ClipVideo: React.FC<{
   clip: VersusClip;
   allocatedDurationInFrames: number;
@@ -36,15 +43,16 @@ const ClipVideo: React.FC<{
   const src = resolveClipSrc(clip.src);
 
   let trimBefore = 0;
+  let clipDurationInFrames: number | undefined;
   if (clip.durationInSeconds !== undefined) {
-    const clipDurationInFrames = Math.floor(clip.durationInSeconds * fps);
+    clipDurationInFrames = Math.floor(clip.durationInSeconds * fps);
     const maxStart = clipDurationInFrames - allocatedDurationInFrames;
     if (maxStart > 0) {
       trimBefore = Math.floor(random(`${seed}:${clip.src}`) * (maxStart + 1));
     }
   }
 
-  return (
+  const video = (
     <OffthreadVideo
       src={src}
       muted
@@ -52,6 +60,16 @@ const ClipVideo: React.FC<{
       trimBefore={trimBefore}
     />
   );
+
+  if (
+    clipDurationInFrames !== undefined &&
+    clipDurationInFrames > 0 &&
+    clipDurationInFrames < allocatedDurationInFrames
+  ) {
+    return <Loop durationInFrames={clipDurationInFrames}>{video}</Loop>;
+  }
+
+  return video;
 };
 
 // Renders the clip timeline for one Versus render: 1-2 short intro clips

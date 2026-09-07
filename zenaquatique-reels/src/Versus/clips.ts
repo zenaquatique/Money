@@ -2,10 +2,12 @@ import type { VersusClip } from "./types";
 
 // A render uses 2-3 distinct clips, explicitly chosen by the caller (Make):
 // all clips but the last are short cuts shown during the Hook, and the
-// last clip is the long "tail" that plays continuously behind Option A,
-// Option B and Verdict — long enough that it never has to freeze/loop.
-// Remotion does not pick clips itself; varying the selection across
-// consecutive generated videos is the caller's responsibility.
+// last clip is the "tail" that plays continuously behind Option A, Option
+// B and Verdict — ideally long enough to cover that whole span, but
+// BackgroundVideoLayer loops it (from frame 0) if it runs out early
+// instead of freezing on its last frame. Remotion does not pick clips
+// itself; varying the selection across consecutive generated videos is
+// the caller's responsibility.
 export const MAX_VERSUS_CLIPS = 3;
 
 export type ClipPlan = {
