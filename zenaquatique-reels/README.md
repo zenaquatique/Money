@@ -248,12 +248,26 @@ Ne pas retirer ces deux options sous peine de retomber sur des rendus flous.
 
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
-Un petit serveur (`server/render-server.js`) expose un webhook `POST /render` :
-tu lui envoies les textes des slides (+ éventuellement `clips`) en JSON, il
-te renvoie le mp4 généré. Cette section explique comment le connecter à
-Make via un tunnel local (ngrok) — pratique pour tester, mais **ton
-ordinateur doit rester allumé et connecté** pendant que Make peut appeler
-le webhook (voir plus bas pour une solution permanente).
+Un petit serveur (`server/render-server.js`) expose trois routes : tu lui
+envoies les textes des slides (+ éventuellement `clips`) en JSON sur
+`POST /render`, il répond **immédiatement** avec un identifiant de tâche
+(`jobId`) pendant qu'il rend la vidéo en arrière-plan ; tu interroges
+ensuite `GET /render/status/:jobId` jusqu'à ce que le rendu soit terminé,
+puis tu télécharges le mp4 via l'URL qu'il te renvoie. Cette section
+explique comment connecter tout ça à Make via un tunnel local (ngrok) —
+pratique pour tester, mais **ton ordinateur doit rester allumé et
+connecté** pendant que Make peut appeler le webhook (voir plus bas pour une
+solution permanente).
+
+**Pourquoi trois appels et pas un seul** : un rendu peut prendre plusieurs
+minutes (Top3 avec 6 segments de voix off, notamment), alors que les
+tunnels gratuits (Cloudflare, ngrok...) coupent la connexion après un délai
+fixe (souvent 120s, non modifiable sur ces offres). Une seule requête qui
+bloque jusqu'à la fin du rendu se ferait donc couper en plein milieu sur un
+format un peu long. En répondant tout de suite avec un `jobId` et en
+laissant Make revenir demander l'état, plus aucun appel HTTP individuel
+n'a besoin de rester ouvert plus de quelques secondes, quelle que soit la
+durée réelle du rendu.
 
 **1. Démarrer le serveur en local**
 
@@ -266,10 +280,20 @@ npm run server
 Le serveur écoute sur `http://localhost:3001`. Teste-le sans Make d'abord :
 
 ```console
+# 1. Lancer le rendu — répond tout de suite avec un jobId
 curl -X POST http://localhost:3001/render \
   -H "Content-Type: application/json" \
-  -d '{"brand":"ZenAquatique","hook":"Ton bac vire au vert ?","optionA":{"label":"La méthode classique","text":"Produits chimiques, résultats incertains."},"optionB":{"label":"ZenAquatique","text":"Un écosystème équilibré."},"verdict":"L'\''aquascaping durable.","cta":"zenaquatique.fr"}' \
-  -o test.mp4
+  -d '{"brand":"ZenAquatique","hook":"Ton bac vire au vert ?","optionA":{"label":"La méthode classique","text":"Produits chimiques, résultats incertains."},"optionB":{"label":"ZenAquatique","text":"Un écosystème équilibré."},"verdict":"L'\''aquascaping durable.","cta":"zenaquatique.fr"}'
+# -> {"jobId":"2e382c61-...","status":"processing"}
+
+# 2. Interroger le statut (répéter toutes les quelques secondes)
+curl http://localhost:3001/render/status/2e382c61-...
+# -> {"status":"processing"}                                        (pas encore fini)
+# -> {"status":"done","videoUrl":"http://localhost:3001/render/result/2e382c61-..."}  (fini)
+# -> {"status":"error","message":"..."}                              (échec)
+
+# 3. Une fois "done", télécharger le mp4 depuis videoUrl
+curl "http://localhost:3001/render/result/2e382c61-..." -o test.mp4
 ```
 
 Si `test.mp4` s'ouvre et joue la vidéo, le serveur fonctionne.
@@ -299,19 +323,46 @@ l'URL publique à donner à Make. ⚠️ Avec un compte gratuit, cette adresse
 **change à chaque redémarrage** de ngrok : il faudra la remettre à jour
 dans Make.
 
-**4. Configurer le module HTTP dans Make**
+**4. Configurer les modules HTTP dans Make**
 
+Le scénario a besoin de 3 modules HTTP à la suite (plus une boucle
+d'attente entre le 2ᵉ et le 3ᵉ) au lieu d'un seul :
+
+*Module 1 — lancer le rendu*
 - Méthode : `POST`
 - URL : `https://xxxx.ngrok-free.app/render`
 - En-têtes : `Content-Type: application/json` et `x-api-key: un-secret-a-toi`
   (si configuré à l'étape 2)
 - Corps (JSON) : les champs `brand`, `hook`, `optionA`, `optionB`, `verdict`,
   `cta`, et optionnellement `clips` (voir section ci-dessus)
+- Réponse : JSON `{"jobId": "...", "status": "processing"}` — parsing JSON
+  normal (contrairement à avant, ce n'est plus le fichier vidéo)
+
+*Attente + Module 2 — interroger le statut*
+- Ajoute un délai (module "Sleep", ~5-10s) puis un module HTTP `GET`
+  `https://xxxx.ngrok-free.app/render/status/{{jobId du module 1}}`
+  (même en-tête `x-api-key` si configuré)
+- Renvoie `{"status": "processing"}`, `{"status": "done", "videoUrl": "..."}`
+  ou `{"status": "error", "message": "..."}`
+- Enveloppe ces deux étapes (Sleep + HTTP status) dans un **Repeater** ou une
+  branche conditionnelle qui reboucle tant que `status = "processing"`, et
+  sort dès que `status` vaut `"done"` (continuer vers le module 3) ou
+  `"error"` (arrêter/notifier). Un rendu prend de quelques dizaines de
+  secondes à plusieurs minutes selon le format et le nombre de voix off —
+  prévois une limite raisonnable de tentatives (ex. 60 × 10s = 10 min) pour
+  éviter une boucle infinie en cas de souci.
+
+*Module 3 — télécharger le fichier final*
+- Méthode : `GET`
+- URL : le `videoUrl` reçu à l'étape précédente (déjà une URL complète,
+  pointant vers `/render/result/:jobId`)
+- Même en-tête `x-api-key` si configuré
 - Le module doit interpréter la réponse comme un **fichier binaire** (pas
   du JSON) — dans Make, choisis "Parse response" désactivé ou récupère le
   contenu brut pour l'enregistrer/l'envoyer ailleurs (Google Drive, etc.)
-- Augmente le timeout du module HTTP à ~120s : un rendu de 21s peut prendre
-  30 à 90 secondes selon la machine.
+- Le fichier reste disponible en téléchargement pendant 30 minutes après la
+  fin du rendu (au cas où ce module échouerait et devrait réessayer) —
+  passé ce délai, le `jobId` expire et `videoUrl` renvoie une 404.
 
 **Choisir le format** : ajoute un champ `"format"` dans le corps JSON —
 `"versus"` (défaut si le champ est absent, donc les scénarios Make déjà en

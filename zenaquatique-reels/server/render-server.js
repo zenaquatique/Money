@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -55,6 +56,37 @@ const MAX_CLIPS = 3;
 // (same value used before this moved server-side — see
 // src/Versus/voiceoverTimeline.ts for how it's consumed).
 const VOICEOVER_MARGIN_SECONDS = 0.15;
+
+// Renders run in the background (see POST /render below) — a render can
+// take well over two minutes (e.g. Top3 with 6 voiceover segments), which
+// free-tier Cloudflare tunnels hard-cut at 120s ("context canceled") since
+// that limit isn't configurable on that tier. Job state lives in a plain
+// in-memory Map, not a real queue/Redis: this server handles one render at
+// a time on a single machine, so a Map is enough and needs no extra
+// dependency — it's simply empty again after a restart, which is fine
+// since Make always starts a fresh POST /render and gets a fresh jobId.
+const jobs = new Map();
+// How long a finished (done/error) job's status + video file are kept
+// after completion, so Make has time to poll and download even if it's
+// slow to come back. Swept by a timer started the moment the job finishes
+// (see finishJob below), not from job creation, so a slow render itself is
+// never cut short by this.
+const JOB_RETENTION_MS = 30 * 60 * 1000;
+
+const finishJob = (jobId, result) => {
+  const job = jobs.get(jobId);
+  if (!job) {
+    return;
+  }
+  Object.assign(job, result, { finishedAt: Date.now() });
+  setTimeout(() => {
+    const current = jobs.get(jobId);
+    if (current?.videoPath) {
+      fs.unlink(current.videoPath, () => {});
+    }
+    jobs.delete(jobId);
+  }, JOB_RETENTION_MS).unref();
+};
 
 let bundleLocationPromise = null;
 const getBundleLocation = () => {
@@ -152,8 +184,100 @@ const pickMusicTrack = (seed) => {
   return audioFiles[Math.min(index, audioFiles.length - 1)];
 };
 
+// Does the actual rendering work for one job — everything that used to run
+// inline in the POST /render handler between validation and sending the
+// response. Never touches `res`: it only ever writes its outcome into the
+// `jobs` map, since by the time it runs the client already got its jobId
+// back (see POST /render below). Same rendering logic as before this
+// change (voix off, musique, rushs, sous-titres) — only how the result is
+// communicated to the caller changed.
+const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => {
+  let outputPath;
+  try {
+    // Runs concurrently with the voiceover duration probing below — neither
+    // depends on the other's result.
+    const clipsProbe = Array.isArray(inputProps.clips)
+      ? Promise.all(
+          inputProps.clips.map(async (clip) => {
+            if (/^https?:\/\//.test(clip.src)) {
+              return;
+            }
+            try {
+              const metadata = await getVideoMetadata(path.join(PUBLIC_DIR, clip.src));
+              clip.durationInSeconds = metadata.durationInSeconds;
+            } catch (error) {
+              console.warn(`Impossible de lire la durée de ${clip.src}:`, error.message || error);
+            }
+          }),
+        )
+      : Promise.resolve();
+
+    const [, voiceoverDurations] = await Promise.all([
+      clipsProbe,
+      probeVoiceoverDurations(inputProps.voiceovers),
+    ]);
+    inputProps.voiceoverDurations = voiceoverDurations;
+
+    // Background music: pick one file from public/audio/music/ (same seed
+    // as above, namespaced separately) — that's as far as the server goes.
+    // Its duration is probed client-side in AudioLayer (see there for why:
+    // Remotion's compositor, used above for video clips, refuses
+    // audio-only files outright). No file found → musicTrack stays
+    // undefined and AudioLayer simply renders no music.
+    const musicFile = pickMusicTrack(inputProps.renderSeed);
+    if (musicFile) {
+      inputProps.musicTrack = { src: `audio/music/${musicFile}` };
+    }
+
+    const serveUrl = await getBundleLocation();
+    const composition = await selectComposition({
+      serveUrl,
+      id: compositionConfig.id,
+      inputProps,
+      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
+    });
+
+    outputPath = path.join(os.tmpdir(), `${formatKey}-${jobId}.mp4`);
+
+    console.log(`[${jobId}] Rendu en cours -> ${outputPath}`);
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: "h264",
+      // remotion.config.ts does NOT apply when calling the Node.js API
+      // directly (only to the CLI), so every encoding quality setting
+      // must be passed here explicitly or Remotion silently falls back
+      // to its own defaults. In particular the default image format is
+      // "jpeg" (lossy per-frame capture) — that was making every frame,
+      // including the crisp on-screen text, blurry. "png" is lossless.
+      imageFormat: "png",
+      crf: 18,
+      outputLocation: outputPath,
+      inputProps,
+      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
+    });
+
+    console.log(`[${jobId}] Rendu terminé -> ${outputPath}`);
+    finishJob(jobId, { status: "done", videoPath: outputPath, format: formatKey });
+  } catch (error) {
+    console.error(`[${jobId}] Échec du rendu:`, error);
+    if (outputPath) {
+      fs.unlink(outputPath, () => {});
+    }
+    finishJob(jobId, {
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const app = express();
 app.use(express.json({ limit: "2mb" }));
+// Behind the Cloudflare tunnel, requests reach this process as plain HTTP
+// (the tunnel terminates TLS) but set X-Forwarded-Proto: https — trusting
+// the proxy makes req.protocol reflect that, so the videoUrl built in GET
+// /render/status/:jobId below is a correct https:// link instead of http://.
+app.set("trust proxy", true);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
@@ -234,100 +358,88 @@ app.post("/render", async (req, res) => {
     inputProps.renderSeed = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
-  // Look up each local clip's real duration once, server-side, via
-  // Remotion's own compositor (the same decoder OffthreadVideo uses at
-  // render time — unlike the browser's native <video> element, it isn't
-  // picky about encoding quirks). BackgroundVideoLayer uses this to
-  // decide whether a clip is long enough to need a random start point.
-  // Remote (http/https) clips are left as-is — probing them would need a
-  // download first — so they always start at frame 0, same as before.
-  //
-  // Runs concurrently with the voiceover duration probing below — neither
-  // depends on the other's result.
-  const clipsProbe = Array.isArray(inputProps.clips)
-    ? Promise.all(
-        inputProps.clips.map(async (clip) => {
-          if (/^https?:\/\//.test(clip.src)) {
-            return;
-          }
-          try {
-            const metadata = await getVideoMetadata(path.join(PUBLIC_DIR, clip.src));
-            clip.durationInSeconds = metadata.durationInSeconds;
-          } catch (error) {
-            console.warn(`Impossible de lire la durée de ${clip.src}:`, error.message || error);
-          }
-        }),
-      )
-    : Promise.resolve();
+  // From here on the request is valid — hand it off to a background job
+  // instead of rendering inline. The old synchronous version blocked this
+  // whole request until renderMedia finished, which free-tier Cloudflare
+  // tunnels cut off at a hard 120s ("context canceled") regardless of how
+  // long the render actually needed (Top3 with 6 voiceover segments
+  // routinely takes longer than that). The response below is immediate;
+  // the caller polls GET /render/status/:jobId and downloads from the
+  // videoUrl it returns once status is "done".
+  const jobId = crypto.randomUUID();
+  jobs.set(jobId, { status: "processing", createdAt: Date.now() });
+  runRenderJob(jobId, formatKey, compositionConfig, inputProps).catch((error) => {
+    // runRenderJob already catches its own errors and calls finishJob —
+    // this only fires if something throws outside that (e.g. a bug in
+    // finishJob itself), so the job doesn't hang as "processing" forever.
+    console.error(`[${jobId}] Erreur inattendue:`, error);
+    finishJob(jobId, {
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
 
-  const [, voiceoverDurations] = await Promise.all([
-    clipsProbe,
-    probeVoiceoverDurations(inputProps.voiceovers),
-  ]);
-  inputProps.voiceoverDurations = voiceoverDurations;
+  res.status(202).json({ jobId, status: "processing" });
+});
 
-  // Background music: pick one file from public/audio/music/ (same seed
-  // as above, namespaced separately) — that's as far as the server goes.
-  // Its duration is probed client-side in AudioLayer (see there for why:
-  // Remotion's compositor, used above for video clips, refuses
-  // audio-only files outright). No file found → musicTrack stays
-  // undefined and AudioLayer simply renders no music.
-  const musicFile = pickMusicTrack(inputProps.renderSeed);
-  if (musicFile) {
-    inputProps.musicTrack = { src: `audio/music/${musicFile}` };
+app.get("/render/status/:jobId", (req, res) => {
+  if (API_KEY && req.header("x-api-key") !== API_KEY) {
+    res.status(401).json({ error: "Clé API invalide ou manquante (en-tête x-api-key)." });
+    return;
   }
 
-  let outputPath;
-  try {
-    const serveUrl = await getBundleLocation();
-    const composition = await selectComposition({
-      serveUrl,
-      id: compositionConfig.id,
-      inputProps,
-      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
-    });
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: "jobId inconnu (jamais créé, ou expiré après téléchargement)." });
+    return;
+  }
 
-    outputPath = path.join(
-      os.tmpdir(),
-      `${formatKey}-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
-    );
+  if (job.status === "processing") {
+    res.json({ status: "processing" });
+    return;
+  }
 
-    console.log(`Rendu en cours -> ${outputPath}`);
-    await renderMedia({
-      composition,
-      serveUrl,
-      codec: "h264",
-      // remotion.config.ts does NOT apply when calling the Node.js API
-      // directly (only to the CLI), so every encoding quality setting
-      // must be passed here explicitly or Remotion silently falls back
-      // to its own defaults. In particular the default image format is
-      // "jpeg" (lossy per-frame capture) — that was making every frame,
-      // including the crisp on-screen text, blurry. "png" is lossless.
-      imageFormat: "png",
-      crf: 18,
-      outputLocation: outputPath,
-      inputProps,
-      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
-    });
+  if (job.status === "error") {
+    res.json({ status: "error", message: job.message });
+    return;
+  }
 
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="${formatKey}.mp4"`);
-    res.sendFile(outputPath, (err) => {
-      fs.unlink(outputPath, () => {});
-      if (err && !res.headersSent) {
-        res.status(500).json({ error: "Échec de l'envoi du fichier rendu." });
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    if (outputPath) {
-      fs.unlink(outputPath, () => {});
+  const videoUrl = `${req.protocol}://${req.get("host")}/render/result/${req.params.jobId}`;
+  res.json({ status: "done", videoUrl });
+});
+
+app.get("/render/result/:jobId", (req, res) => {
+  if (API_KEY && req.header("x-api-key") !== API_KEY) {
+    res.status(401).json({ error: "Clé API invalide ou manquante (en-tête x-api-key)." });
+    return;
+  }
+
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: "jobId inconnu (jamais créé, ou expiré)." });
+    return;
+  }
+  if (job.status !== "done") {
+    res.status(409).json({ error: `Rendu pas encore terminé (status: ${job.status}).` });
+    return;
+  }
+
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${job.format}.mp4"`);
+  // Deliberately not deleted after being sent — kept until the
+  // JOB_RETENTION_MS cleanup timer (started in finishJob) fires, so Make
+  // has time to fetch it even if it's slow to come back or retries.
+  res.sendFile(job.videoPath, (err) => {
+    if (err && !res.headersSent) {
+      res.status(500).json({ error: "Échec de l'envoi du fichier rendu." });
     }
-    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-  }
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`Serveur de rendu Versus démarré sur http://localhost:${PORT}`);
-  console.log(`Endpoint à appeler depuis Make: POST http://localhost:${PORT}/render`);
+  console.log(`Endpoints à appeler depuis Make:`);
+  console.log(`  POST   http://localhost:${PORT}/render               -> { jobId, status }`);
+  console.log(`  GET    http://localhost:${PORT}/render/status/:jobId -> { status, videoUrl? }`);
+  console.log(`  GET    http://localhost:${PORT}/render/result/:jobId -> le fichier mp4`);
 });
