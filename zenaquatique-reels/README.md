@@ -52,14 +52,29 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
   plus court, il boucle automatiquement (reprend à 0) plutôt que de geler
   sur sa dernière image — voir plus bas.
 - 2 clips → 1 court + 1 long. 3 clips → 2 courts + 1 long. 1 seul clip → il
-  sert à la fois d'intro et de fond continu. Aucun clip → repli sur le fond
-  uni de la v1 (texte seul).
-- Ne jamais fournir deux fois la même combinaison de rushes pour deux
-  vidéos générées consécutivement : c'est la responsabilité de l'appelant
-  (Make), pas de Remotion.
+  sert à la fois d'intro et de fond continu.
+- `"clips": []` (tableau explicitement vide) → repli volontaire sur le fond
+  uni de la v1 (texte seul), aucune rotation automatique.
 
 Placez vos rushes dans `public/video/rushes/` (ou tout autre sous-dossier de
 `public/`) pour qu'ils soient servis en `src` relatif.
+
+**Rotation automatique si `clips` est absent** : si le champ `clips` n'est
+**pas du tout envoyé** dans la requête (différent d'un tableau vide, voir
+ci-dessus), `server/render-server.js` choisit lui-même le prochain groupe de
+rushes à la place de Make — plus besoin de gérer une rotation côté Make. Il
+liste `public/video/rushes/` (fichiers `.mp4`/`.mov`, triés par nom), avance
+un curseur de 3 fichiers (`MAX_CLIPS`) à chaque rendu, et boucle une fois
+tout le dossier parcouru — donc deux rendus consécutifs n'utilisent jamais
+la même combinaison, jusqu'à ce que tout le dossier ait tourné une fois.
+Ce curseur est persisté dans `server/.rush-rotation-state.json` (pas
+commité dans Git — état d'exécution, pas du code) pour survivre à un
+redémarrage du serveur, pas seulement à un redémarrage entre deux rendus de
+la même session. Dossier vide/introuvable → aucun clip choisi, même repli
+que `"clips": []` (fond uni, sans erreur). S'applique aux 4 formats. Pour
+revenir à un contrôle explicite depuis Make sur un rendu donné, il suffit
+d'envoyer `clips` comme avant — cela désactive la rotation automatique pour
+ce rendu précis, sans rien changer aux autres.
 
 **Formats de fichier** : `.mp4` et `.mov` fonctionnent tous les deux sans
 rien à configurer (`.mov` est un export standard iPhone/caméra en H.264 ou

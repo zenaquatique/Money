@@ -5,3 +5,7 @@ dist
 
 # Ignore the output video from Git but not videos you import into src/.
 out
+
+# Runtime state, not source — see RUSH_ROTATION_STATE_FILE in
+# server/render-server.js.
+server/.rush-rotation-state.json

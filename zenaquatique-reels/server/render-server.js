@@ -13,6 +13,15 @@ const ENTRY_POINT = path.join(__dirname, "..", "src", "index.ts");
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const MUSIC_DIR = path.join(PUBLIC_DIR, "audio", "music");
 const MUSIC_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
+const RUSHES_DIR = path.join(PUBLIC_DIR, "video", "rushes");
+const RUSH_EXTENSIONS = new Set([".mp4", ".mov"]);
+// Where the "next group to use" cursor is persisted (see
+// pickNextRushGroup below) — a file, not just an in-memory variable, so
+// the rotation survives a server restart instead of reusing the same
+// first group every time the server is relaunched (e.g. every time you
+// restart it on your laptop). Not committed to git (see .gitignore) —
+// it's runtime state, not source.
+const RUSH_ROTATION_STATE_FILE = path.join(__dirname, ".rush-rotation-state.json");
 const DEFAULT_FORMAT = "versus";
 // Which Remotion composition to render per "format" value, and the fields
 // each one requires. "format" is absent → DEFAULT_FORMAT, unchanged from
@@ -184,6 +193,71 @@ const pickMusicTrack = (seed) => {
   return audioFiles[Math.min(index, audioFiles.length - 1)];
 };
 
+// Keep in sync with MAX_CLIPS above — the group size auto-rotation picks.
+const RUSH_GROUP_SIZE = MAX_CLIPS;
+
+const readRushRotationCursor = () => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(RUSH_ROTATION_STATE_FILE, "utf8"));
+    return typeof parsed.cursor === "number" && Number.isFinite(parsed.cursor) ? parsed.cursor : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeRushRotationCursor = (cursor) => {
+  try {
+    fs.writeFileSync(RUSH_ROTATION_STATE_FILE, JSON.stringify({ cursor }), "utf8");
+  } catch (error) {
+    console.warn(
+      "Impossible d'enregistrer le curseur de rotation des rushes:",
+      error.message || error,
+    );
+  }
+};
+
+// Auto-picks the next group of RUSH_GROUP_SIZE rush files from
+// public/video/rushes/ when the caller (Make) didn't send a `clips` field
+// at all — cycles through every file in that folder (sorted, so the order
+// is stable across renders), advancing the cursor by RUSH_GROUP_SIZE each
+// time and wrapping back to the start once every file has been used, so
+// two consecutive renders never reuse the same combination (except right
+// at the wrap-around point if the total count isn't a multiple of
+// RUSH_GROUP_SIZE — the last, undersized group and the first group after
+// it can then share one or two files; a minor, self-correcting edge case
+// rather than something worth padding around). The cursor is persisted to
+// RUSH_ROTATION_STATE_FILE, not just kept in memory, specifically so it
+// survives a server restart — the whole point of this is avoiding repeats
+// across separate runs of the pipeline, and on a laptop those are often
+// separate server sessions, not just separate renders in one uptime.
+// Returns undefined (→ falls back to no video background, same as an
+// empty/missing `clips`) when the folder is missing, empty, or contains no
+// recognized rush file.
+const pickNextRushGroup = () => {
+  let files;
+  try {
+    files = fs.readdirSync(RUSHES_DIR);
+  } catch {
+    return undefined;
+  }
+  const rushFiles = files
+    .filter((file) => RUSH_EXTENSIONS.has(path.extname(file).toLowerCase()))
+    .sort();
+  if (rushFiles.length === 0) {
+    return undefined;
+  }
+
+  const cursor = readRushRotationCursor() % rushFiles.length;
+  const groupSize = Math.min(RUSH_GROUP_SIZE, rushFiles.length);
+  const group = Array.from(
+    { length: groupSize },
+    (_, i) => rushFiles[(cursor + i) % rushFiles.length],
+  );
+  writeRushRotationCursor((cursor + RUSH_GROUP_SIZE) % rushFiles.length);
+
+  return group.map((file) => ({ src: `video/rushes/${file}` }));
+};
+
 // Does the actual rendering work for one job — everything that used to run
 // inline in the POST /render handler between validation and sending the
 // response. Never touches `res`: it only ever writes its outcome into the
@@ -194,6 +268,16 @@ const pickMusicTrack = (seed) => {
 const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => {
   let outputPath;
   try {
+    // Auto-rotation only kicks in when the caller didn't send a `clips`
+    // field at all — an explicit `"clips": []` still means "no video
+    // background, text only" (see planClips), not "pick for me".
+    if (inputProps.clips === undefined) {
+      const autoClips = pickNextRushGroup();
+      if (autoClips) {
+        inputProps.clips = autoClips;
+      }
+    }
+
     // Runs concurrently with the voiceover duration probing below — neither
     // depends on the other's result.
     const clipsProbe = Array.isArray(inputProps.clips)
