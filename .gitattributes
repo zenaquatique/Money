@@ -1,0 +1,18 @@
+# Force LF line endings on every text file, regardless of a contributor's
+# local git config (core.autocrlf) or editor — a VPS-side commit once
+# converted the whole repo to CRLF because of exactly that, turning every
+# file's diff into noise. Binary assets are left untouched.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.mov binary
+*.mp3 binary
+*.wav binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
