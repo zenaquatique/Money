@@ -15,6 +15,17 @@ const MUSIC_DIR = path.join(PUBLIC_DIR, "audio", "music");
 const MUSIC_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const RUSHES_DIR = path.join(PUBLIC_DIR, "video", "rushes");
 const RUSH_EXTENSIONS = new Set([".mp4", ".mov"]);
+
+// Where materialized voiceover audio files (decoded from the base64 Data
+// URIs Make sends) are written before rendering — see materializeVoiceovers
+// below for why this is needed at all.
+const VOICEOVER_TMP_DIR = path.join(PUBLIC_DIR, "tmp-voiceovers");
+try {
+  fs.mkdirSync(VOICEOVER_TMP_DIR, { recursive: true });
+} catch (error) {
+  console.warn("Impossible de créer le dossier tmp-voiceovers:", error.message || error);
+}
+
 // Where the "next group to use" cursor is persisted (see
 // pickNextRushGroup below) — a file, not just an in-memory variable, so
 // the rotation survives a server restart instead of reusing the same
@@ -93,6 +104,11 @@ const finishJob = (jobId, result) => {
     if (current?.videoPath) {
       fs.unlink(current.videoPath, () => {});
     }
+    if (current?.voiceoverFiles) {
+      for (const filePath of current.voiceoverFiles) {
+        fs.unlink(filePath, () => {});
+      }
+    }
     jobs.delete(jobId);
   }, JOB_RETENTION_MS).unref();
 };
@@ -123,9 +139,21 @@ const getMusicMetadata = () => {
 // (Opaque Response Blocking) protection blocks cross-origin audio fetches
 // to hosts like Google Drive ("net::ERR_BLOCKED_BY_ORB" / "MEDIA_ELEMENT_
 // ERROR: Format error") — Node's own fetch isn't subject to that
-// browser-only protection, so probing here sidesteps it entirely.
+// browser-only protection, so probing here sidesteps it entirely. Also
+// handles data: URIs (base64-encoded audio sent directly by Make) by
+// decoding the buffer in-process, without any network round-trip at all.
 const probeAudioDurationInSeconds = async (src) => {
   const { parseBuffer, parseFile } = await getMusicMetadata();
+  if (/^data:/.test(src)) {
+    const match = /^data:([^;]+);base64,(.+)$/.exec(src);
+    if (!match) {
+      throw new Error("Data URI audio malformée");
+    }
+    const [, mimeType, base64Data] = match;
+    const buffer = Buffer.from(base64Data, "base64");
+    const metadata = await parseBuffer(buffer, mimeType);
+    return metadata.format.duration;
+  }
   if (/^https?:\/\//.test(src)) {
     const response = await fetch(src);
     if (!response.ok) {
@@ -167,6 +195,42 @@ const probeVoiceoverDurations = async (voiceovers) => {
   );
   const durations = Object.fromEntries(entries.filter(([, duration]) => duration !== undefined));
   return Object.keys(durations).length > 0 ? durations : undefined;
+};
+
+// Remotion's Rust compositor (used to write each media asset to a temp
+// file before ffprobe/ffmpeg touch it) writes an EMPTY file when the
+// <Audio src="data:..."> URI it's asked to decode is a large inline
+// base64 payload — unlike Node's own Buffer decoding above (used for
+// duration probing), which handles the exact same data fine. Rather than
+// fight the compositor's own decoding, this sidesteps it entirely:
+// decode each data: URI here, in Node, write the raw bytes to a real
+// file under public/tmp-voiceovers/, and hand the composition a normal
+// relative path instead — from the compositor's point of view that's
+// just an ordinary public asset, no inline decoding involved. Non-data:
+// URIs (plain URLs, if ever used) pass through untouched. Returns the
+// list of files written so the caller can clean them up once the job is
+// done (see finishJob).
+const materializeVoiceovers = (jobId, voiceovers) => {
+  if (!voiceovers) {
+    return { resolved: voiceovers, writtenFiles: [] };
+  }
+  const writtenFiles = [];
+  const resolved = {};
+  for (const [key, src] of Object.entries(voiceovers)) {
+    const match = /^data:([^;]+);base64,(.+)$/.exec(src);
+    if (!match) {
+      resolved[key] = src;
+      continue;
+    }
+    const [, , base64Data] = match;
+    const buffer = Buffer.from(base64Data, "base64");
+    const fileName = `${jobId}-${key}.mp3`;
+    const filePath = path.join(VOICEOVER_TMP_DIR, fileName);
+    fs.writeFileSync(filePath, buffer);
+    writtenFiles.push(filePath);
+    resolved[key] = `tmp-voiceovers/${fileName}`;
+  }
+  return { resolved, writtenFiles };
 };
 
 // Picks one file from public/audio/music/ deterministically from `seed`
@@ -267,6 +331,7 @@ const pickNextRushGroup = () => {
 // communicated to the caller changed.
 const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => {
   let outputPath;
+  let voiceoverFiles = [];
   try {
     // Auto-rotation only kicks in when the caller didn't send a `clips`
     // field at all — an explicit `"clips": []` still means "no video
@@ -301,6 +366,13 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
       probeVoiceoverDurations(inputProps.voiceovers),
     ]);
     inputProps.voiceoverDurations = voiceoverDurations;
+
+    // Write each base64 voiceover to a real file under public/tmp-voiceovers/
+    // and swap inputProps.voiceovers to point at those paths instead — see
+    // materializeVoiceovers above for why this step exists at all.
+    const materialized = materializeVoiceovers(jobId, inputProps.voiceovers);
+    inputProps.voiceovers = materialized.resolved;
+    voiceoverFiles = materialized.writtenFiles;
 
     // Background music: pick one file from public/audio/music/ (same seed
     // as above, namespaced separately) — that's as far as the server goes.
@@ -342,11 +414,14 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
     });
 
     console.log(`[${jobId}] Rendu terminé -> ${outputPath}`);
-    finishJob(jobId, { status: "done", videoPath: outputPath, format: formatKey });
+    finishJob(jobId, { status: "done", videoPath: outputPath, format: formatKey, voiceoverFiles });
   } catch (error) {
     console.error(`[${jobId}] Échec du rendu:`, error);
     if (outputPath) {
       fs.unlink(outputPath, () => {});
+    }
+    for (const filePath of voiceoverFiles) {
+      fs.unlink(filePath, () => {});
     }
     finishJob(jobId, {
       status: "error",
@@ -356,7 +431,7 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
 };
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "50mb" }));
 // Behind the Cloudflare tunnel, requests reach this process as plain HTTP
 // (the tunnel terminates TLS) but set X-Forwarded-Proto: https — trusting
 // the proxy makes req.protocol reflect that, so the videoUrl built in GET
