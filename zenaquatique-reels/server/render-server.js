@@ -70,7 +70,11 @@ const COMPOSITIONS = {
     requiredFields: ["brand", "hook", "message1", "message2", "cta"],
   },
 };
-// Keep in sync with MAX_VERSUS_CLIPS in src/Versus/clips.ts
+// Caps how many clips Make can send *explicitly* in `clips` — unrelated to
+// how many the composition can actually display: the auto-rotation path
+// (pickRushesForTailDuration below) can pick more than this for the tail
+// sequence, since it decides the count itself rather than trusting
+// arbitrary caller input.
 const MAX_CLIPS = 3;
 // Small readability margin added on top of each voiceover's real duration
 // (same value used before this moved server-side — see
@@ -257,7 +261,9 @@ const pickMusicTrack = (seed) => {
   return audioFiles[Math.min(index, audioFiles.length - 1)];
 };
 
-// Keep in sync with MAX_CLIPS above — the group size auto-rotation picks.
+// The intro-clip count auto-rotation picks (RUSH_GROUP_SIZE - 1) matches
+// what the old fixed group of RUSH_GROUP_SIZE used to give (2 intro + 1
+// tail) — only the tail count changed, see pickRushesForTailDuration.
 const RUSH_GROUP_SIZE = MAX_CLIPS;
 
 const readRushRotationCursor = () => {
@@ -280,24 +286,47 @@ const writeRushRotationCursor = (cursor) => {
   }
 };
 
-// Auto-picks the next group of RUSH_GROUP_SIZE rush files from
-// public/video/rushes/ when the caller (Make) didn't send a `clips` field
-// at all — cycles through every file in that folder (sorted, so the order
-// is stable across renders), advancing the cursor by RUSH_GROUP_SIZE each
-// time and wrapping back to the start once every file has been used, so
-// two consecutive renders never reuse the same combination (except right
-// at the wrap-around point if the total count isn't a multiple of
-// RUSH_GROUP_SIZE — the last, undersized group and the first group after
-// it can then share one or two files; a minor, self-correcting edge case
-// rather than something worth padding around). The cursor is persisted to
-// RUSH_ROTATION_STATE_FILE, not just kept in memory, specifically so it
-// survives a server restart — the whole point of this is avoiding repeats
-// across separate runs of the pipeline, and on a laptop those are often
-// separate server sessions, not just separate renders in one uptime.
-// Returns undefined (→ falls back to no video background, same as an
-// empty/missing `clips`) when the folder is missing, empty, or contains no
-// recognized rush file.
-const pickNextRushGroup = () => {
+// Probes every candidate rush file's real duration in one batch (cheap:
+// local files, same decoder used elsewhere in this file for explicit
+// Make-provided clips) so pickRushesForTailDuration below can reason about
+// them as plain numbers instead of probing one at a time as it picks.
+const probeRushDurationsInSeconds = async (files) => {
+  const entries = await Promise.all(
+    files.map(async (file) => {
+      try {
+        const metadata = await getVideoMetadata(path.join(RUSHES_DIR, file));
+        return [file, metadata.durationInSeconds];
+      } catch (error) {
+        console.warn(`Impossible de lire la durée de ${file}:`, error.message || error);
+        return [file, undefined];
+      }
+    }),
+  );
+  return Object.fromEntries(entries);
+};
+
+// Auto-picks rush files from public/video/rushes/ for one render, when the
+// caller (Make) didn't send a `clips` field at all. The rush COUNT is no
+// longer fixed at RUSH_GROUP_SIZE (3): up to RUSH_GROUP_SIZE - 1 short
+// intro clips are picked as before (played during the Hook), but the tail
+// keeps picking additional clips — 4th, 5th, as many as needed — until
+// their combined real duration covers the whole post-Hook span
+// (tailDurationInFrames, passed in by the caller once it knows the
+// video's real total duration — see runRenderJob). BackgroundVideoLayer's
+// own loop-if-short fallback still exists as a last resort (a duration
+// that couldn't be read, or a rushes pool too small to ever cover the
+// span), but with this the very last picked clip essentially never needs
+// it in practice.
+//
+// Every render advances the shared rotation cursor by exactly the number
+// of files it actually used (not always RUSH_GROUP_SIZE) — see
+// readRushRotationCursor/writeRushRotationCursor — so a render that needed
+// 5 rushes doesn't leave 2 "owed", and the next render's first pick is
+// always the very next unused file, whatever ran before it. Returns
+// undefined (→ falls back to no video background, same as an empty/missing
+// `clips`) when the folder is missing, empty, or contains no recognized
+// rush file.
+const pickRushesForTailDuration = async (tailDurationInFrames, fps) => {
   let files;
   try {
     files = fs.readdirSync(RUSHES_DIR);
@@ -311,15 +340,52 @@ const pickNextRushGroup = () => {
     return undefined;
   }
 
+  const durationsInSeconds = await probeRushDurationsInSeconds(rushFiles);
   const cursor = readRushRotationCursor() % rushFiles.length;
-  const groupSize = Math.min(RUSH_GROUP_SIZE, rushFiles.length);
-  const group = Array.from(
-    { length: groupSize },
-    (_, i) => rushFiles[(cursor + i) % rushFiles.length],
-  );
-  writeRushRotationCursor((cursor + RUSH_GROUP_SIZE) % rushFiles.length);
+  let offset = 0;
+  const nextFile = () => {
+    const file = rushFiles[(cursor + offset) % rushFiles.length];
+    offset += 1;
+    return file;
+  };
+  const toClip = (file) => ({
+    src: `video/rushes/${file}`,
+    durationInSeconds: durationsInSeconds[file],
+  });
 
-  return group.map((file) => ({ src: `video/rushes/${file}` }));
+  // Only one rush exists at all: it serves as both intro and tail (same
+  // special case planClips itself falls back to), nothing more to pick.
+  if (rushFiles.length === 1) {
+    const clip = toClip(nextFile());
+    writeRushRotationCursor(cursor);
+    return { clips: [clip], tailCount: 1 };
+  }
+
+  const introCount = Math.min(RUSH_GROUP_SIZE - 1, rushFiles.length - 1);
+  const introClips = Array.from({ length: introCount }, () => toClip(nextFile()));
+
+  const tailClips = [];
+  let coveredInFrames = 0;
+  const maxTailClips = rushFiles.length - introCount;
+  while (tailClips.length < maxTailClips) {
+    const clip = toClip(nextFile());
+    tailClips.push(clip);
+    coveredInFrames +=
+      clip.durationInSeconds !== undefined
+        ? Math.floor(clip.durationInSeconds * fps)
+        // Unknown duration (probe failed): assume it's enough on its own
+        // rather than keep piling on more clips past it — matches the
+        // "no error, just less precise" contract used for every other
+        // best-effort probe in this file.
+        : tailDurationInFrames;
+    if (coveredInFrames >= tailDurationInFrames) {
+      break;
+    }
+  }
+
+  writeRushRotationCursor((cursor + offset) % rushFiles.length);
+
+  return { clips: [...introClips, ...tailClips], tailCount: tailClips.length };
 };
 
 // Does the actual rendering work for one job — everything that used to run
@@ -335,17 +401,17 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
   try {
     // Auto-rotation only kicks in when the caller didn't send a `clips`
     // field at all — an explicit `"clips": []` still means "no video
-    // background, text only" (see planClips), not "pick for me".
-    if (inputProps.clips === undefined) {
-      const autoClips = pickNextRushGroup();
-      if (autoClips) {
-        inputProps.clips = autoClips;
-      }
-    }
+    // background, text only" (see planClips), not "pick for me". How many
+    // rushes that needs isn't known yet at this point (it depends on the
+    // video's real total duration, itself driven by voiceoverDurations
+    // below) — see the second selectComposition call further down for
+    // where the actual picking happens.
+    const needsAutoRotation = inputProps.clips === undefined;
 
-    // Runs concurrently with the voiceover duration probing below — neither
-    // depends on the other's result.
-    const clipsProbe = Array.isArray(inputProps.clips)
+    // Explicit Make-provided clips get their real duration probed same as
+    // always. Auto-rotation clips get probed as part of picking them
+    // instead (see pickRushesForTailDuration) — skip here.
+    const clipsProbe = !needsAutoRotation && Array.isArray(inputProps.clips)
       ? Promise.all(
           inputProps.clips.map(async (clip) => {
             if (/^https?:\/\//.test(clip.src)) {
@@ -386,12 +452,42 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
     }
 
     const serveUrl = await getBundleLocation();
-    const composition = await selectComposition({
+    const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined;
+    let composition = await selectComposition({
       serveUrl,
       id: compositionConfig.id,
       inputProps,
-      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
+      browserExecutable,
     });
+
+    if (needsAutoRotation) {
+      // composition.props here already carries calculateMetadata's
+      // resolved durationsInSeconds (see Root.tsx) — clips never factor
+      // into that calculation, so it's safe to read the Hook's real
+      // duration and the video's total duration *before* clips are
+      // decided, then pick exactly as many tail rushes as needed to cover
+      // what's left.
+      const hookDurationInSeconds = composition.props?.durationsInSeconds?.hook ?? 0;
+      const hookDurationInFrames = Math.floor(hookDurationInSeconds * composition.fps);
+      const tailDurationInFrames = composition.durationInFrames - hookDurationInFrames;
+      const picked = await pickRushesForTailDuration(tailDurationInFrames, composition.fps);
+      if (picked) {
+        inputProps.clips = picked.clips;
+        inputProps.tailCount = picked.tailCount;
+        // Re-resolve now that clips/tailCount are set, so composition.props
+        // (what renderMedia below actually uses) includes them — the
+        // clips-less first call couldn't have produced them itself. This
+        // can't change durationInFrames/fps/durationsInSeconds (still
+        // purely a function of voiceoverDurations, untouched since the
+        // first call).
+        composition = await selectComposition({
+          serveUrl,
+          id: compositionConfig.id,
+          inputProps,
+          browserExecutable,
+        });
+      }
+    }
 
     outputPath = path.join(os.tmpdir(), `${formatKey}-${jobId}.mp4`);
 
@@ -410,7 +506,7 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
       crf: 18,
       outputLocation: outputPath,
       inputProps,
-      browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE || undefined,
+      browserExecutable,
     });
 
     console.log(`[${jobId}] Rendu terminé -> ${outputPath}`);

@@ -24,6 +24,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
   verdict,
   cta,
   clips,
+  tailCount,
   durationsInSeconds,
   renderSeed,
   voiceovers,
@@ -35,8 +36,8 @@ export const VersusComposition: React.FC<VersusProps> = ({
   const [hookSlide, optionASlide, optionBSlide, verdictSlide] =
     getSlideTimeline(durations, fps);
   const totalDurationInFrames = getTotalDurationInFrames(durations, fps);
-  const { introClips, tailClip } = planClips(clips);
-  const hasVideoBackground = tailClip !== undefined;
+  const { introClips, tailClips } = planClips(clips, tailCount);
+  const hasVideoBackground = tailClips.length > 0;
   // Versus has no separate CTA slide (see VerdictSlide) — when both a
   // verdict and a distinct cta voiceover are provided, cta's audio starts
   // right where verdict's real audio ends, both within this one Sequence
@@ -51,7 +52,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
       <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
-        tailClip={tailClip}
+        tailClips={tailClips}
         hookDurationInFrames={hookSlide.durationInFrames}
         totalDurationInFrames={totalDurationInFrames}
         seed={renderSeed ?? "static-seed"}

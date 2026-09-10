@@ -54,13 +54,21 @@ export type VersusProps = {
   optionB: VersusOption;
   verdict: string;
   cta: string;
-  // 2-3 rush clips to use as slide backgrounds, in the exact order to use
-  // them: every clip but the last plays as a short cut during the Hook,
-  // the last one is the longer clip behind Option A/B/Verdict. The caller
-  // (Make) picks which files and their order for each render — Remotion
-  // does not choose or randomize clips itself. Omit/empty for a
+  // Rush clips to use as slide backgrounds, in the exact order to use
+  // them: every clip but the last `tailCount` (see below) plays as a short
+  // cut during the Hook, the rest play behind Option A/B/Verdict. The
+  // caller (Make) picks which files and their order for each render —
+  // Remotion does not choose or randomize clips itself. Omit/empty for a
   // text-only render on a solid background.
   clips?: VersusClip[];
+  // Internal: how many of the *last* clips in `clips` make up the tail
+  // sequence (played behind Option A/B/Verdict) rather than the Hook's
+  // intro — set by server/render-server.js's auto-rotation
+  // (pickRushesForTailDuration) when it picks more than one tail clip so
+  // the whole span is covered by real footage instead of one clip
+  // looping. Not meant to be set by callers (Make); omitted (defaults to
+  // 1, i.e. "last clip is the tail") when Make sends `clips` explicitly.
+  tailCount?: number;
   durationsInSeconds?: Partial<VersusSlideDurations>;
   // Internal: set by server/render-server.js to a fresh value on every
   // render so BackgroundVideoLayer picks a different random start point

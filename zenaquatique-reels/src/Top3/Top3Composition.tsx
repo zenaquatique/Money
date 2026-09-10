@@ -21,6 +21,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
   benefices,
   cta,
   clips,
+  tailCount,
   durationsInSeconds,
   renderSeed,
   voiceovers,
@@ -31,15 +32,15 @@ export const Top3Composition: React.FC<Top3Props> = ({
   const [hookSlide, produit1Slide, produit2Slide, produit3Slide, benefSlide, ctaSlide] =
     getSlideTimeline(durations, fps);
   const totalDurationInFrames = getTotalDurationInFrames(durations, fps);
-  const { introClips, tailClip } = planClips(clips);
-  const hasVideoBackground = tailClip !== undefined;
+  const { introClips, tailClips } = planClips(clips, tailCount);
+  const hasVideoBackground = tailClips.length > 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
       <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
-        tailClip={tailClip}
+        tailClips={tailClips}
         hookDurationInFrames={hookSlide.durationInFrames}
         totalDurationInFrames={totalDurationInFrames}
         seed={renderSeed ?? "static-seed"}

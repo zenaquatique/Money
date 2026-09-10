@@ -36,10 +36,12 @@ export type EducatifProps = {
   conseil2: string;
   conseil3: string;
   cta: string;
-  // Same contract as Versus/Top3: 2-3 rush clips, explicitly ordered by the
+  // Same contract as Versus/Top3: rush clips, explicitly ordered by the
   // caller (Make) — see src/Versus/clips.ts for how they're split into
-  // intro cuts vs. the long tail clip. Omit/empty for a text-only render.
+  // intro cuts vs. the tail sequence. Omit/empty for a text-only render.
   clips?: VersusClip[];
+  // Internal — see the identical field in src/Versus/types.ts.
+  tailCount?: number;
   durationsInSeconds?: Partial<EducatifSlideDurations>;
   // Internal: set by server/render-server.js to a fresh value on every
   // render so BackgroundVideoLayer picks a different random start point

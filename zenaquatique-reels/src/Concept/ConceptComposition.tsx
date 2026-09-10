@@ -18,6 +18,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   message2,
   cta,
   clips,
+  tailCount,
   durationsInSeconds,
   renderSeed,
   voiceovers,
@@ -28,15 +29,15 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   const [hookSlide, message1Slide, message2Slide, ctaSlide] =
     getSlideTimeline(durations, fps);
   const totalDurationInFrames = getTotalDurationInFrames(durations, fps);
-  const { introClips, tailClip } = planClips(clips);
-  const hasVideoBackground = tailClip !== undefined;
+  const { introClips, tailClips } = planClips(clips, tailCount);
+  const hasVideoBackground = tailClips.length > 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.deepWater }}>
       <AudioLayer musicTrack={musicTrack} />
       <BackgroundVideoLayer
         introClips={introClips}
-        tailClip={tailClip}
+        tailClips={tailClips}
         hookDurationInFrames={hookSlide.durationInFrames}
         totalDurationInFrames={totalDurationInFrames}
         seed={renderSeed ?? "static-seed"}

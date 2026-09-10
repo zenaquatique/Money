@@ -44,13 +44,14 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 
 - `src` est soit un chemin relatif à `public/` (ex. `video/rushes/xxx.mp4`,
   résolu via `staticFile`), soit une URL `http(s)://` complète.
-- **Tous les clips sauf le dernier** sont des coupes courtes jouées à la
-  suite pendant le Hook (intro dynamique, montage cut).
-- **Le dernier clip** de la liste est le clip long : il joue en continu
-  derrière Option A, Option B et Verdict, sur toute cette durée (~17s par
-  défaut). Idéalement assez long pour la couvrir en une fois, mais s'il est
-  plus court, il boucle automatiquement (reprend à 0) plutôt que de geler
-  sur sa dernière image — voir plus bas.
+- **Tous les clips sauf le(s) dernier(s)** sont des coupes courtes jouées à
+  la suite pendant le Hook (intro dynamique, montage cut).
+- **Le dernier clip** de la liste joue en continu derrière Option A, Option
+  B et Verdict, sur toute cette durée (~17s par défaut). Idéalement assez
+  long pour la couvrir en une fois, mais s'il est plus court, il boucle
+  automatiquement (reprend à 0) plutôt que de geler sur sa dernière image —
+  voir plus bas. Quand Make envoie `clips` explicitement, c'est toujours
+  exactement le dernier clip qui joue ce rôle (comportement inchangé).
 - 2 clips → 1 court + 1 long. 3 clips → 2 courts + 1 long. 1 seul clip → il
   sert à la fois d'intro et de fond continu.
 - `"clips": []` (tableau explicitement vide) → repli volontaire sur le fond
@@ -61,20 +62,37 @@ Placez vos rushes dans `public/video/rushes/` (ou tout autre sous-dossier de
 
 **Rotation automatique si `clips` est absent** : si le champ `clips` n'est
 **pas du tout envoyé** dans la requête (différent d'un tableau vide, voir
-ci-dessus), `server/render-server.js` choisit lui-même le prochain groupe de
-rushes à la place de Make — plus besoin de gérer une rotation côté Make. Il
-liste `public/video/rushes/` (fichiers `.mp4`/`.mov`, triés par nom), avance
-un curseur de 3 fichiers (`MAX_CLIPS`) à chaque rendu, et boucle une fois
-tout le dossier parcouru — donc deux rendus consécutifs n'utilisent jamais
-la même combinaison, jusqu'à ce que tout le dossier ait tourné une fois.
-Ce curseur est persisté dans `server/.rush-rotation-state.json` (pas
-commité dans Git — état d'exécution, pas du code) pour survivre à un
-redémarrage du serveur, pas seulement à un redémarrage entre deux rendus de
-la même session. Dossier vide/introuvable → aucun clip choisi, même repli
-que `"clips": []` (fond uni, sans erreur). S'applique aux 4 formats. Pour
-revenir à un contrôle explicite depuis Make sur un rendu donné, il suffit
-d'envoyer `clips` comme avant — cela désactive la rotation automatique pour
-ce rendu précis, sans rien changer aux autres.
+ci-dessus), `server/render-server.js` choisit lui-même les rushes à la
+place de Make — plus besoin de gérer une rotation côté Make. Il liste
+`public/video/rushes/` (fichiers `.mp4`/`.mov`, triés par nom), en pioche
+jusqu'à 2 comme coupes courtes pour le Hook, puis pioche **autant de clips
+que nécessaire** pour la partie qui joue derrière Option A/B/Verdict —
+**le nombre n'est plus fixé à 3** :
+
+- Si les rushes piochés pour cette partie totalisent déjà assez de durée
+  (souvent : 1 seul clip assez long), le rendu s'arrête là — 3 rushes au
+  total, comme avant.
+- Sinon, il continue à piocher un 4ᵉ, un 5ᵉ (etc.) rush jusqu'à couvrir
+  toute la durée, pour enchaîner de vrais rushes différents plutôt que de
+  laisser le dernier boucler plusieurs fois (voir "Boucle si le rush est
+  trop court" ci-dessous — ce mécanisme reste un filet de sécurité pour le
+  tout dernier clip, mais n'est presque plus jamais nécessaire).
+
+Chaque rendu avance le curseur de rotation partagé du **nombre réel** de
+rushes utilisés cette fois-ci (3, 4, 5...), jamais un nombre fixe — sinon
+la rotation se désynchroniserait (des rushes reviendraient plus souvent
+que d'autres, ou seraient sautés). Deux rendus consécutifs n'utilisent
+donc jamais la même combinaison, et le curseur boucle proprement une fois
+tout le dossier parcouru. Il est persisté dans
+`server/.rush-rotation-state.json` (pas commité dans Git — état
+d'exécution, pas du code) pour survivre à un redémarrage du serveur, pas
+seulement entre deux rendus de la même session. Dossier vide/introuvable
+→ aucun clip choisi, même repli que `"clips": []` (fond uni, sans erreur).
+S'applique aux 4 formats. Pour revenir à un contrôle explicite depuis Make
+sur un rendu donné, il suffit d'envoyer `clips` comme avant — cela
+désactive la rotation automatique pour ce rendu précis (et revient au
+comportement "dernier clip = seul clip de fond", sans en piocher
+davantage), sans rien changer aux autres.
 
 **Formats de fichier** : `.mp4` et `.mov` fonctionnent tous les deux sans
 rien à configurer (`.mov` est un export standard iPhone/caméra en H.264 ou
@@ -97,19 +115,29 @@ ou si sa durée n'a pas pu être lue, le comportement reste inchangé (départ
 à 0). Cette lecture de durée ne s'applique qu'aux fichiers locaux — un
 `clips[].src` en URL `http(s)://` démarre toujours à 0.
 
-**Boucle si le rush est trop court** : à l'inverse, si un fichier local dure
-*moins* longtemps que le segment/slide qu'il illustre, `BackgroundVideoLayer`
-le fait boucler (reprend à la frame 0 du fichier, autant de fois que
+**Boucle si le rush est trop court** : si un fichier local dure *moins*
+longtemps que le segment/slide qu'il illustre, `BackgroundVideoLayer` le
+fait boucler (reprend à la frame 0 du fichier, autant de fois que
 nécessaire) plutôt que de le laisser se figer sur sa dernière image une fois
-fini — que ce soit le clip long derrière Option A/B/Verdict, ou un des clips
-courts de l'intro. Le point de redémarrage de la boucle est toujours la
-frame 0 du fichier, pas le point de départ aléatoire éventuel décrit
-ci-dessus (qui ne s'applique qu'au tout premier passage). C'est un cut net
-à chaque reprise (pas de fondu), donc un rush qui boucle proprement (contenu
-qui ne saute pas trop visuellement entre sa dernière et sa première image)
-reste préférable ; ce mécanisme évite juste l'effet de gel, ce n'est pas un
-substitut à un rush bien choisi/assez long. S'applique aux 4 formats, tous
-partagent le même `BackgroundVideoLayer`.
+fini — que ce soit un des clips courts de l'intro, ou le tout dernier clip
+de la partie Option A/B/Verdict. Le point de redémarrage de la boucle est
+toujours la frame 0 du fichier, pas le point de départ aléatoire éventuel
+décrit ci-dessus (qui ne s'applique qu'au tout premier passage). C'est un
+cut net à chaque reprise (pas de fondu).
+
+Pour la partie Option A/B/Verdict spécifiquement, ce mécanisme n'est plus
+la ligne de défense principale contre l'effet de gel : avec la rotation
+automatique (voir plus haut), le serveur pioche désormais autant de
+rushes que nécessaire pour couvrir toute cette durée avec de vrais clips
+différents enchaînés bout à bout (chacun chronométré sur sa propre durée
+réelle), donc le dernier clip de la séquence n'a presque plus jamais
+besoin de boucler. La boucle reste un filet de sécurité pour les cas
+limites (durée illisible, `clips` fourni explicitement par Make avec un
+seul clip trop court, ou dossier de rushes trop petit pour couvrir toute
+la durée même en le vidant entièrement) — un rush qui boucle proprement
+(pas de saut visuel entre sa dernière et sa première image) reste
+préférable si jamais ce filet de sécurité doit s'activer. S'applique aux
+4 formats, tous partagent le même `BackgroundVideoLayer`.
 
 ## Format "Top3"
 

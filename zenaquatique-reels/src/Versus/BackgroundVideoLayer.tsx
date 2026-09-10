@@ -72,24 +72,27 @@ const ClipVideo: React.FC<{
   return video;
 };
 
-// Renders the clip timeline for one Versus render: 1-2 short intro clips
-// shown back to back during the Hook, then a single longer clip playing
-// continuously behind the rest of the video. Renders nothing (falls back
-// to the slides' own solid background) when no clips are provided.
+// Renders the clip timeline for one render: 1-2 short intro clips shown
+// back to back during the Hook, then one or more clips playing back to
+// back behind the rest of the video (the "tail" — see planClips/tailCount
+// for how many). Renders nothing (falls back to the slides' own solid
+// background) when no clips are provided.
 export const BackgroundVideoLayer: React.FC<{
   introClips: VersusClip[];
-  tailClip: VersusClip | undefined;
+  tailClips: VersusClip[];
   hookDurationInFrames: number;
   totalDurationInFrames: number;
   seed: string;
 }> = ({
   introClips,
-  tailClip,
+  tailClips,
   hookDurationInFrames,
   totalDurationInFrames,
   seed,
 }) => {
-  if (!tailClip) {
+  const { fps } = useVideoConfig();
+
+  if (tailClips.length === 0) {
     return null;
   }
 
@@ -97,6 +100,36 @@ export const BackgroundVideoLayer: React.FC<{
     introClips.length > 0
       ? Math.floor(hookDurationInFrames / introClips.length)
       : 0;
+
+  const tailTotalDuration = totalDurationInFrames - hookDurationInFrames;
+  // Each tail clip after the first starts exactly where the previous
+  // clip's own real duration ends — not an equal split — so together they
+  // cover the whole span with distinct footage instead of one clip
+  // looping (see pickRushesForTailDuration in server/render-server.js for
+  // how many clips end up here and why there are usually just enough).
+  // The very last one still gets whatever remains, whatever that is —
+  // ClipVideo's own loop-if-too-short fallback covers it if that's more
+  // than its own real duration (unknown duration, e.g. a remote URL from
+  // an explicit Make-provided `clips`, or the rushes pool being too small
+  // to fully cover the span).
+  let tailCursor = 0;
+  const tailSequences = tailClips
+    .map((clip, index) => {
+      const isLast = index === tailClips.length - 1;
+      const remaining = tailTotalDuration - tailCursor;
+      const knownDurationInFrames =
+        clip.durationInSeconds !== undefined
+          ? Math.floor(clip.durationInSeconds * fps)
+          : undefined;
+      const durationInFrames =
+        isLast || knownDurationInFrames === undefined
+          ? remaining
+          : Math.min(knownDurationInFrames, remaining);
+      const from = hookDurationInFrames + tailCursor;
+      tailCursor += durationInFrames;
+      return { clip, from, durationInFrames, index };
+    })
+    .filter((sequence) => sequence.durationInFrames > 0);
 
   return (
     <AbsoluteFill>
@@ -121,16 +154,19 @@ export const BackgroundVideoLayer: React.FC<{
           </Sequence>
         );
       })}
-      <Sequence
-        from={hookDurationInFrames}
-        durationInFrames={totalDurationInFrames - hookDurationInFrames}
-      >
-        <ClipVideo
-          clip={tailClip}
-          allocatedDurationInFrames={totalDurationInFrames - hookDurationInFrames}
-          seed={`${seed}:tail`}
-        />
-      </Sequence>
+      {tailSequences.map(({ clip, from, durationInFrames, index }) => (
+        <Sequence
+          key={`${clip.src}-tail-${index}`}
+          from={from}
+          durationInFrames={durationInFrames}
+        >
+          <ClipVideo
+            clip={clip}
+            allocatedDurationInFrames={durationInFrames}
+            seed={`${seed}:tail:${index}`}
+          />
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

@@ -1,33 +1,41 @@
 import type { VersusClip } from "./types";
 
-// A render uses 2-3 distinct clips, explicitly chosen by the caller (Make):
-// all clips but the last are short cuts shown during the Hook, and the
-// last clip is the "tail" that plays continuously behind Option A, Option
-// B and Verdict — ideally long enough to cover that whole span, but
-// BackgroundVideoLayer loops it (from frame 0) if it runs out early
-// instead of freezing on its last frame. Remotion does not pick clips
-// itself; varying the selection across consecutive generated videos is
-// the caller's responsibility.
-export const MAX_VERSUS_CLIPS = 3;
-
 export type ClipPlan = {
   introClips: VersusClip[];
-  tailClip: VersusClip | undefined;
+  tailClips: VersusClip[];
 };
 
-export const planClips = (clips: VersusClip[] | undefined): ClipPlan => {
-  const usable = (clips ?? []).slice(0, MAX_VERSUS_CLIPS);
+// Splits an ordered `clips` array into the short intro cuts shown during
+// the Hook and the clip(s) that play continuously behind the rest of the
+// video. `tailCount` says how many of the *last* clips in the array belong
+// to that tail — everything before them is intro. Historically the tail
+// was always exactly 1 clip (server/render-server.js's fixed group of 3:
+// 2 intro + 1 tail), which is still what happens when `tailCount` is
+// omitted (Make sending `clips` explicitly, without this internal field).
+// When the caller needs the tail to cover more than one clip can on its
+// own — see pickRushesForTailDuration in server/render-server.js — it sets
+// `tailCount` to however many of the trailing clips make up that
+// sequence, so BackgroundVideoLayer can chain them instead of looping a
+// single one.
+export const planClips = (
+  clips: VersusClip[] | undefined,
+  tailCount: number | undefined,
+): ClipPlan => {
+  const usable = clips ?? [];
 
   if (usable.length === 0) {
-    return { introClips: [], tailClip: undefined };
+    return { introClips: [], tailClips: [] };
   }
 
+  // Only one clip available at all: it serves as both intro and tail
+  // (regardless of tailCount) rather than being intro-only with no tail.
   if (usable.length === 1) {
-    return { introClips: usable, tailClip: usable[0] };
+    return { introClips: usable, tailClips: usable };
   }
 
+  const effectiveTailCount = Math.max(1, Math.min(tailCount ?? 1, usable.length));
   return {
-    introClips: usable.slice(0, -1),
-    tailClip: usable[usable.length - 1],
+    introClips: usable.slice(0, usable.length - effectiveTailCount),
+    tailClips: usable.slice(usable.length - effectiveTailCount),
   };
 };

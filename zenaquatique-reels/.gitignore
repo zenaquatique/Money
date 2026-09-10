@@ -9,3 +9,8 @@ out
 # Runtime state, not source — see RUSH_ROTATION_STATE_FILE in
 # server/render-server.js.
 server/.rush-rotation-state.json
+
+# Materialized voiceover files (decoded from base64 Data URIs before
+# rendering, deleted again once each job's retention window ends) — see
+# VOICEOVER_TMP_DIR in server/render-server.js. Runtime data, not source.
+public/tmp-voiceovers/
