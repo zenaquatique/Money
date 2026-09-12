@@ -289,6 +289,28 @@ passés explicitement à `renderMedia` :
 
 Ne pas retirer ces deux options sous peine de retomber sur des rendus flous.
 
+## Post-traitement faststart (upload Instagram/TikTok)
+
+Une fois le rendu Remotion terminé, `server/render-server.js` (fonction
+`applyFaststart`, appelée depuis `runRenderJob` — un seul point d'appel
+partagé par les 4 formats) passe le fichier par `ffmpeg -c copy -movflags
++faststart` avant de le marquer comme prêt (`status: "done"`). Ça déplace
+l'atome `moov` (l'index du fichier) au tout début du mp4 au lieu de la fin
+— sans ça, Instagram et TikTok refusent l'upload (erreur Meta 2207077) car
+leurs validateurs ont besoin de lire cet index avant de streamer le
+fichier. `-c copy` ne fait que réécrire le conteneur (pas de ré-encodage),
+donc c'est rapide et sans perte.
+
+**Prérequis** : `ffmpeg` doit être installé et accessible dans le `PATH` du
+serveur (`which ffmpeg`) — c'est un binaire système, pas une dépendance
+npm.
+
+Si cette étape échoue (ffmpeg absent, fichier corrompu...), le job entier
+passe en `status: "error"` avec le message de l'erreur ffmpeg — le fichier
+original (sans faststart) n'est jamais servi tel quel, puisqu'il échouerait
+de toute façon à l'upload sur ces plateformes. Le serveur continue de
+tourner normalement, cette erreur n'affecte que la tâche en cours.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose trois routes : tu lui

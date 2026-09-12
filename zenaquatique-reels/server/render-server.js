@@ -2,10 +2,14 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const express = require("express");
 const { bundle } = require("@remotion/bundler");
 const { renderMedia, selectComposition, getVideoMetadata } = require("@remotion/renderer");
 const { random } = require("remotion");
+
+const execFileAsync = promisify(execFile);
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.RENDER_API_KEY;
@@ -115,6 +119,51 @@ const finishJob = (jobId, result) => {
     }
     jobs.delete(jobId);
   }, JOB_RETENTION_MS).unref();
+};
+
+// Moves the `moov` atom to the front of the rendered mp4 ("faststart"), a
+// post-processing pass required after every render regardless of format
+// (called once from runRenderJob, shared by all 4 compositions rather than
+// duplicated per format). Remotion writes `moov` at the end by default,
+// which Instagram/TikTok's upload validators reject outright (Meta error
+// 2207077) since they need to read that atom before they'll stream/accept
+// the file. `-c copy` remuxes the container only — no re-encode, so this
+// is fast and lossless.
+//
+// Runs ffmpeg into a separate temp file rather than in place (ffmpeg can't
+// safely overwrite its own input while reading it), then swaps it in:
+// delete the original, rename the faststart output to take its path. That
+// rename *is* the "replace the original and clean up the temp file" step
+// in one move — there's nothing left over to delete afterward once it's
+// renamed into place.
+//
+// Throws on ffmpeg failure (non-zero exit, or the binary missing) — the
+// caller (runRenderJob) treats that as the render job failing, same as any
+// other step; the original, non-faststart file is left in place (not
+// served — see below) rather than silently shipping a file that would
+// fail Instagram/TikTok upload anyway.
+const applyFaststart = async (jobId, outputPath) => {
+  const faststartPath = outputPath.replace(/\.mp4$/, "-faststart.mp4");
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      outputPath,
+      "-c",
+      "copy",
+      "-movflags",
+      "+faststart",
+      faststartPath,
+    ]);
+  } catch (error) {
+    fs.unlink(faststartPath, () => {});
+    throw new Error(
+      `Échec du post-traitement faststart (ffmpeg): ${error.message || error}`,
+    );
+  }
+  fs.unlinkSync(outputPath);
+  fs.renameSync(faststartPath, outputPath);
+  console.log(`[${jobId}] faststart appliqué -> ${outputPath}`);
 };
 
 let bundleLocationPromise = null;
@@ -510,6 +559,15 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
     });
 
     console.log(`[${jobId}] Rendu terminé -> ${outputPath}`);
+
+    // Required for Instagram/TikTok to accept the upload — see
+    // applyFaststart above. Runs here, still inside this try block and
+    // still before the job is marked "done", so a failure here is handled
+    // exactly like any other render failure by the catch block below
+    // (job -> "error", outputPath cleaned up) instead of shipping a file
+    // that would fail those platforms' validators anyway.
+    await applyFaststart(jobId, outputPath);
+
     finishJob(jobId, { status: "done", videoPath: outputPath, format: formatKey, voiceoverFiles });
   } catch (error) {
     console.error(`[${jobId}] Échec du rendu:`, error);
