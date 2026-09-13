@@ -289,6 +289,37 @@ passés explicitement à `renderMedia` :
 
 Ne pas retirer ces deux options sous peine de retomber sur des rendus flous.
 
+## Bundle Remotion et fichiers écrits pendant l'exécution
+
+`server/render-server.js` ne bundle la composition Remotion (`bundle()`,
+fonction `getBundleLocation`) qu'**une seule fois**, au tout premier rendu
+après le démarrage du serveur — le résultat est mis en cache
+(`bundleLocationPromise`) pour toute la durée de vie du process, pour ne
+pas payer le coût du bundling à chaque requête.
+
+Par défaut, `bundle()` **copie** `public/` dans le dossier de sortie du
+bundle à ce moment précis, une seule fois. N'importe quel fichier écrit
+dans `public/` *après* ce premier bundling (par exemple chaque voix off
+matérialisée en `.mp3` sous `public/tmp-voiceovers/`, voir
+`materializeVoiceovers` — nécessairement écrite après coup, puisqu'elle
+dépend de la requête) serait invisible pour Remotion : le rendu suivant
+irait chercher un fichier qui n'existe pas dans cette copie figée, avec une
+erreur `404 - could not be found` malgré un fichier bien présent sur le
+disque. C'est un piège classique à ne pas confondre avec une race
+condition d'écriture (l'écriture elle-même est `await`-ée bien avant que
+Remotion n'entre en jeu) — c'est le bundle qui est périmé, pas le fichier
+qui arrive en retard.
+
+`getBundleLocation` passe donc `symlinkPublicDir: true` à `bundle()` : au
+lieu d'une copie figée, Remotion crée un **lien symbolique** vers le vrai
+dossier `public/`, qui reflète donc toujours son contenu actuel — tout
+fichier ajouté après coup (voix off, ou n'importe quoi d'autre à l'avenir)
+devient visible immédiatement, sans avoir besoin de rebundler. Ne pas
+retirer cette option : la retirer réintroduit ce bug, qui n'apparaît qu'à
+partir du 2ᵉ rendu sur un même process serveur (le tout premier rendu
+fonctionne toujours, puisque le bundling n'a lieu qu'à ce moment-là — d'où
+le caractère "intermittent" de l'erreur en pratique).
+
 ## Post-traitement faststart (upload Instagram/TikTok)
 
 Une fois le rendu Remotion terminé, `server/render-server.js` (fonction

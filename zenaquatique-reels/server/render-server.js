@@ -170,7 +170,24 @@ let bundleLocationPromise = null;
 const getBundleLocation = () => {
   if (!bundleLocationPromise) {
     console.log("Bundling la composition Remotion (une seule fois au démarrage)...");
-    bundleLocationPromise = bundle({ entryPoint: ENTRY_POINT });
+    bundleLocationPromise = bundle({
+      entryPoint: ENTRY_POINT,
+      // By default @remotion/bundler COPIES public/ into the bundle output
+      // ONCE, at this exact moment — and since bundleLocationPromise below
+      // caches that bundle for the server's entire uptime, any file
+      // written to public/ afterward (every voiceover file materialized
+      // per-request, see materializeVoiceovers — they can't possibly exist
+      // yet at this point) would silently be invisible to every render
+      // after the very first one, which is what caused the intermittent
+      // "404 - could not be found" on tmp-voiceovers/*.mp3: not a race in
+      // the write itself (fs.promises.writeFile is awaited well before
+      // this), but a stale one-time snapshot of public/ taken before those
+      // files existed. symlinkPublicDir makes it a symlink instead of a
+      // copy, so the bundle always reflects the *current* contents of
+      // public/ — new files become visible immediately, no re-bundling
+      // needed.
+      symlinkPublicDir: true,
+    });
   }
   return bundleLocationPromise;
 };
@@ -260,29 +277,37 @@ const probeVoiceoverDurations = async (voiceovers) => {
 // file under public/tmp-voiceovers/, and hand the composition a normal
 // relative path instead — from the compositor's point of view that's
 // just an ordinary public asset, no inline decoding involved. Non-data:
-// URIs (plain URLs, if ever used) pass through untouched. Returns the
-// list of files written so the caller can clean them up once the job is
-// done (see finishJob).
-const materializeVoiceovers = (jobId, voiceovers) => {
+// URIs (plain URLs, if ever used) pass through untouched.
+//
+// All writes run through fs.promises.writeFile and are collected into one
+// Promise.all — the caller awaits this function fully before the render
+// starts, so every file is confirmed written (and logged) before Remotion
+// ever gets a chance to ask for one. Returns the list of files written so
+// the caller can both verify them (see runRenderJob) and clean them up
+// once the job is done (see finishJob).
+const materializeVoiceovers = async (jobId, voiceovers) => {
   if (!voiceovers) {
     return { resolved: voiceovers, writtenFiles: [] };
   }
   const writtenFiles = [];
   const resolved = {};
-  for (const [key, src] of Object.entries(voiceovers)) {
-    const match = /^data:([^;]+);base64,(.+)$/.exec(src);
-    if (!match) {
-      resolved[key] = src;
-      continue;
-    }
-    const [, , base64Data] = match;
-    const buffer = Buffer.from(base64Data, "base64");
-    const fileName = `${jobId}-${key}.mp3`;
-    const filePath = path.join(VOICEOVER_TMP_DIR, fileName);
-    fs.writeFileSync(filePath, buffer);
-    writtenFiles.push(filePath);
-    resolved[key] = `tmp-voiceovers/${fileName}`;
-  }
+  await Promise.all(
+    Object.entries(voiceovers).map(async ([key, src]) => {
+      const match = /^data:([^;]+);base64,(.+)$/.exec(src);
+      if (!match) {
+        resolved[key] = src;
+        return;
+      }
+      const [, , base64Data] = match;
+      const buffer = Buffer.from(base64Data, "base64");
+      const fileName = `${jobId}-${key}.mp3`;
+      const filePath = path.join(VOICEOVER_TMP_DIR, fileName);
+      await fs.promises.writeFile(filePath, buffer);
+      console.log(`[${jobId}] Voiceover écrit -> ${fileName}`);
+      writtenFiles.push(filePath);
+      resolved[key] = `tmp-voiceovers/${fileName}`;
+    }),
+  );
   return { resolved, writtenFiles };
 };
 
@@ -484,10 +509,24 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
 
     // Write each base64 voiceover to a real file under public/tmp-voiceovers/
     // and swap inputProps.voiceovers to point at those paths instead — see
-    // materializeVoiceovers above for why this step exists at all.
-    const materialized = materializeVoiceovers(jobId, inputProps.voiceovers);
+    // materializeVoiceovers above for why this step exists at all. Awaited
+    // in full (it's a single Promise.all internally) before anything below
+    // touches Remotion, so every file is confirmed on disk first.
+    const materialized = await materializeVoiceovers(jobId, inputProps.voiceovers);
     inputProps.voiceovers = materialized.resolved;
     voiceoverFiles = materialized.writtenFiles;
+
+    // Belt-and-suspenders check: fail with a precise, readable error naming
+    // the missing file(s) rather than letting Remotion surface a generic
+    // 404 mid-render. Should never actually trip given the await above —
+    // this is a fast, cheap safety net for the rare case a write silently
+    // didn't land (disk full, permissions, ...).
+    const missingVoiceoverFiles = voiceoverFiles.filter((filePath) => !fs.existsSync(filePath));
+    if (missingVoiceoverFiles.length > 0) {
+      throw new Error(
+        `Fichier(s) voix off manquant(s) juste avant le rendu : ${missingVoiceoverFiles.join(", ")}`,
+      );
+    }
 
     // Background music: pick one file from public/audio/music/ (same seed
     // as above, namespaced separately) — that's as far as the server goes.
