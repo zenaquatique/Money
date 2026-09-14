@@ -342,15 +342,17 @@ original (sans faststart) n'est jamais servi tel quel, puisqu'il échouerait
 de toute façon à l'upload sur ces plateformes. Le serveur continue de
 tourner normalement, cette erreur n'affecte que la tâche en cours.
 
-## Images clés et transcription (`preview_frames`, `transcribed_audio`)
+## Images clés, transcription et critique visuelle (`preview_frames`, `transcribed_audio`, `visual_critique`)
 
-Une fois le faststart appliqué, deux enrichissements tournent en parallèle
-sur le fichier final avant que le job passe à `"done"` — contrairement à
-faststart, **ni l'un ni l'autre ne peut faire échouer le rendu** : la
-vidéo elle-même est déjà valide à ce stade, ce sont deux compléments, pas
-des prérequis. Une erreur sur l'un des deux est juste loguée
-(`console.warn`) et laisse le champ correspondant vide/absent, sans
-toucher à l'autre ni à la vidéo.
+Une fois le faststart appliqué, trois enrichissements tournent sur le
+fichier final avant que le job passe à `"done"` (images clés et
+transcription en parallèle, puis critique visuelle une fois les images
+clés disponibles puisqu'elle en dépend) — contrairement à faststart,
+**aucun des trois ne peut faire échouer le rendu** : la vidéo elle-même
+est déjà valide à ce stade, ce sont des compléments, pas des prérequis.
+Une erreur sur l'un des trois est juste loguée (`console.warn`) et laisse
+le champ correspondant vide/absent, sans toucher aux autres ni à la
+vidéo.
 
 **Images clés (`extractPreviewFrames`)** — 8 images JPEG extraites à
 intervalles réguliers sur toute la durée de la vidéo (via `ffmpeg -ss ...
@@ -392,6 +394,45 @@ accès réseau sortant vers `huggingface.co` à ce moment-là. Si
 (`transcribed_audio: null`), sans erreur ni impact sur le reste — tu peux
 donc déployer cette fonctionnalité plus tard sans rien casser d'ici là.
 
+**Critique visuelle (`analyzeFrames`)** — 4 des images clés déjà extraites
+ci-dessus (la première, la dernière, et deux réparties entre les deux —
+début/milieu/fin) sont analysées par
+[moondream2](https://huggingface.co/vikhyatk/moondream2), un petit modèle
+de vision-langage open source, avec un prompt qui demande une description
+et tout défaut visuel évident (flou, cadrage, incohérence). Les réponses
+sont combinées en un seul texte. `server/visual_critique.py` fait le
+travail, appelé comme sous-processus Python — même principe que
+`transcribe.py`.
+
+⚠️ Le paquet PyPI officiel `moondream` ne convient **pas** ici : son
+inférence locale (backend "Photon") requiert explicitement un GPU
+(CUDA ou Apple Silicon) et refuse de démarrer sans — inutilisable sur un
+VPS sans GPU, quelle que soit la variante de `torch` installée. C'est
+pourquoi ce script charge `moondream2` via `transformers`
+(`trust_remote_code=True`), l'ancienne méthode de chargement mais qui,
+elle, tourne bien sur CPU.
+
+**Prérequis (critique visuelle uniquement)** — en plus de ffmpeg (déjà
+requis pour les images clés) :
+
+```console
+pip3 install --break-system-packages torch --index-url https://download.pytorch.org/whl/cpu
+pip3 install --break-system-packages transformers einops pillow
+```
+
+(Le premier `pip3 install torch` sans préciser cet index télécharge par
+défaut la variante CUDA, plusieurs Go pour rien sur un serveur sans GPU —
+d'où l'`--index-url` dédié au CPU.)
+
+Le modèle moondream2 (~3.7 Go) est téléchargé automatiquement au tout
+premier appel (mis en cache ensuite dans `~/.cache/huggingface`, comme
+Whisper ci-dessus) — nécessite un accès réseau sortant vers
+`huggingface.co` à ce moment-là, et l'inférence CPU est lente (plusieurs
+secondes par image). Si `transformers`/`torch` ne sont pas installés (ou
+si ce tout premier téléchargement échoue), la critique visuelle est
+simplement absente pour ce rendu (`visual_critique: null`), sans erreur ni
+impact sur le reste.
+
 **Réponse de `GET /render/status/:jobId`** une fois `status: "done"` :
 
 ```json
@@ -402,12 +443,14 @@ donc déployer cette fonctionnalité plus tard sans rien casser d'ici là.
     "https://.../render/frame/abc123/0",
     "https://.../render/frame/abc123/1"
   ],
-  "transcribed_audio": "Ton bac vire au vert ? ..."
+  "transcribed_audio": "Ton bac vire au vert ? ...",
+  "visual_critique": "Image nette, cadrage centré sur l'aquarium, aucun défaut visible. / ..."
 }
 ```
 
 `preview_frames` est toujours un tableau (vide si l'extraction a échoué) ;
-`transcribed_audio` est soit une chaîne, soit `null`.
+`transcribed_audio` et `visual_critique` sont soit une chaîne, soit
+`null`.
 
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
@@ -506,9 +549,10 @@ d'attente entre le 2ᵉ et le 3ᵉ) au lieu d'un seul :
   `https://xxxx.ngrok-free.app/render/status/{{jobId du module 1}}`
   (même en-tête `x-api-key` si configuré)
 - Renvoie `{"status": "processing"}`, `{"status": "done", "videoUrl": "...",
-  "preview_frames": [...], "transcribed_audio": "..."}` (ces deux derniers
-  champs, voir section "Images clés et transcription" plus haut — utilise-les
-  directement depuis la réponse de ce module, pas besoin d'un 4e appel) ou
+  "preview_frames": [...], "transcribed_audio": "...", "visual_critique":
+  "..."}` (ces trois derniers champs, voir section "Images clés,
+  transcription et critique visuelle" plus haut — utilise-les directement
+  depuis la réponse de ce module, pas besoin d'un 4e appel) ou
   `{"status": "error", "message": "..."}`
 - Enveloppe ces deux étapes (Sleep + HTTP status) dans un **Repeater** ou une
   branche conditionnelle qui reboucle tant que `status = "processing"`, et

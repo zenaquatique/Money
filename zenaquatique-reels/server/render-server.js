@@ -104,6 +104,11 @@ const JOB_RETENTION_MS = 30 * 60 * 1000;
 // evenly spread across its duration (see there) — within the "8 à 10"
 // requested.
 const PREVIEW_FRAME_COUNT = 8;
+// How many of those preview frames analyzeFrames sends to moondream2 for
+// visual_critique — a subset (start/middle/end) rather than all
+// PREVIEW_FRAME_COUNT, since each is a slow CPU inference and this is meant
+// to catch obvious defects, not review every frame.
+const VISUAL_CRITIQUE_FRAME_COUNT = 4;
 
 const finishJob = (jobId, result) => {
   const job = jobs.get(jobId);
@@ -253,6 +258,52 @@ const transcribeVoiceover = async (jobId, videoPath) => {
   } finally {
     fs.unlink(audioPath, () => {});
   }
+};
+
+// Picks up to `count` frames spread evenly across framePaths (first, last,
+// and evenly-spaced ones between), so a handful of slow CPU inferences
+// covers start/middle/end of the video rather than a run of near-identical
+// consecutive frames. Returns framePaths unchanged if it's already <= count.
+const selectSpreadFrames = (framePaths, count) => {
+  if (framePaths.length <= count) {
+    return framePaths;
+  }
+  const indices = new Set();
+  for (let i = 0; i < count; i += 1) {
+    indices.add(Math.round((i * (framePaths.length - 1)) / (count - 1)));
+  }
+  return [...indices].map((index) => framePaths[index]);
+};
+
+// Runs a short visual critique of a spread of the already-extracted preview
+// frames through moondream2 (server/visual_critique.py), fully locally via
+// transformers — no paid API, no image ever leaves the server. Combines
+// each frame's answer into one short text.
+//
+// Non-fatal by design (see call site in runRenderJob), same contract as
+// transcribeVoiceover above: requires transformers/torch/einops/Pillow to
+// be installed separately on the machine running this server and, the very
+// first time it runs, network access to download the moondream2 model
+// (~3.7GB, cached afterward). Neither being true yet is not a render
+// failure — visualCritique simply comes back null and a clear reason is
+// logged.
+const analyzeFrames = async (jobId, framePaths) => {
+  const selectedFrames = selectSpreadFrames(framePaths, VISUAL_CRITIQUE_FRAME_COUNT);
+  if (selectedFrames.length === 0) {
+    return null;
+  }
+  const { stdout } = await execFileAsync(
+    "python3",
+    [path.join(__dirname, "visual_critique.py"), ...selectedFrames],
+    { maxBuffer: 10 * 1024 * 1024 },
+  );
+  const critique = stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .join(" / ");
+  console.log(`[${jobId}] Critique visuelle: "${critique}"`);
+  return critique || null;
 };
 
 let bundleLocationPromise = null;
@@ -712,6 +763,14 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
       }),
     ]);
 
+    // Depends on framePaths (picks a spread among them), so it can only run
+    // once frame extraction above has settled — same non-fatal contract as
+    // extractPreviewFrames/transcribeVoiceover, just sequenced after them.
+    const visualCritique = await analyzeFrames(jobId, framePaths).catch((error) => {
+      console.warn(`[${jobId}] Critique visuelle échouée:`, error.message || error);
+      return null;
+    });
+
     finishJob(jobId, {
       status: "done",
       videoPath: outputPath,
@@ -719,6 +778,7 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
       voiceoverFiles,
       framePaths,
       transcribedAudio,
+      visualCritique,
     });
   } catch (error) {
     console.error(`[${jobId}] Échec du rendu:`, error);
@@ -878,6 +938,7 @@ app.get("/render/status/:jobId", (req, res) => {
     videoUrl,
     preview_frames: previewFrames,
     transcribed_audio: job.transcribedAudio ?? null,
+    visual_critique: job.visualCritique ?? null,
   });
 });
 
@@ -951,7 +1012,7 @@ app.listen(PORT, () => {
   console.log(`Endpoints à appeler depuis Make:`);
   console.log(`  POST   http://localhost:${PORT}/render               -> { jobId, status }`);
   console.log(
-    `  GET    http://localhost:${PORT}/render/status/:jobId -> { status, videoUrl?, preview_frames?, transcribed_audio? }`,
+    `  GET    http://localhost:${PORT}/render/status/:jobId -> { status, videoUrl?, preview_frames?, transcribed_audio?, visual_critique? }`,
   );
   console.log(`  GET    http://localhost:${PORT}/render/result/:jobId       -> le fichier mp4`);
   console.log(`  GET    http://localhost:${PORT}/render/frame/:jobId/:index -> une image clé (jpeg)`);
