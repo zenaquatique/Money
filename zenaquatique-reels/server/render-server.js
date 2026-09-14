@@ -931,7 +931,11 @@ app.get("/render/result/:jobId", (req, res) => {
   }
 
   res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", `attachment; filename="${job.format}.mp4"`);
+  // "inline" (not "attachment") on purpose — some upload pipelines (Meta's
+  // among them) fetch this URL expecting to stream/read the file directly
+  // rather than receive a forced-download response; "attachment" here was
+  // producing Instagram/TikTok's "Media upload failed" error code 2207077.
+  res.setHeader("Content-Disposition", `inline; filename="${job.format}.mp4"`);
   // Deliberately not deleted after being sent — kept until the
   // JOB_RETENTION_MS cleanup timer (started in finishJob) fires, so Make
   // has time to fetch it even if it's slow to come back or retries.
