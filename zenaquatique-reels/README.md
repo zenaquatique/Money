@@ -382,7 +382,7 @@ intervalles réguliers sur toute la durée de la vidéo (via `ffmpeg -ss ...
 égaux (jamais la toute première ni la toute dernière frame, plus
 susceptibles d'être un cut/bumper noir que du contenu représentatif).
 Chaque image est servie par une nouvelle route, sur le même principe que
-la vidéo (même cycle de vie/rétention de 30 min, même clé API) :
+la vidéo (même cycle de vie/rétention de 60 min, même clé API) :
 
 ```
 GET /render/frame/:jobId/:index   (index de 0 à 7)
@@ -592,9 +592,11 @@ d'attente entre le 2ᵉ et le 3ᵉ) au lieu d'un seul :
 - Le module doit interpréter la réponse comme un **fichier binaire** (pas
   du JSON) — dans Make, choisis "Parse response" désactivé ou récupère le
   contenu brut pour l'enregistrer/l'envoyer ailleurs (Google Drive, etc.)
-- Le fichier reste disponible en téléchargement pendant 30 minutes après la
-  fin du rendu (au cas où ce module échouerait et devrait réessayer) —
-  passé ce délai, le `jobId` expire et `videoUrl` renvoie une 404.
+- Le fichier reste disponible en téléchargement pendant 60 minutes après la
+  fin du rendu (au cas où ce module échouerait et devrait réessayer, ou
+  qu'une plateforme comme Instagram traite le Reel de façon asynchrone et
+  vienne le récupérer avec du retard) — passé ce délai, le `jobId` expire
+  et `videoUrl` renvoie une 404.
 
 **Choisir le format** : ajoute un champ `"format"` dans le corps JSON —
 `"versus"` (défaut si le champ est absent, donc les scénarios Make déjà en

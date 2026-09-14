@@ -99,7 +99,7 @@ const jobs = new Map();
 // slow to come back. Swept by a timer started the moment the job finishes
 // (see finishJob below), not from job creation, so a slow render itself is
 // never cut short by this.
-const JOB_RETENTION_MS = 30 * 60 * 1000;
+const JOB_RETENTION_MS = 60 * 60 * 1000;
 // How many preview frames extractPreviewFrames pulls from the final video,
 // evenly spread across its duration (see there) — within the "8 à 10"
 // requested.
