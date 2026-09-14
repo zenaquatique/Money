@@ -342,6 +342,73 @@ original (sans faststart) n'est jamais servi tel quel, puisqu'il échouerait
 de toute façon à l'upload sur ces plateformes. Le serveur continue de
 tourner normalement, cette erreur n'affecte que la tâche en cours.
 
+## Images clés et transcription (`preview_frames`, `transcribed_audio`)
+
+Une fois le faststart appliqué, deux enrichissements tournent en parallèle
+sur le fichier final avant que le job passe à `"done"` — contrairement à
+faststart, **ni l'un ni l'autre ne peut faire échouer le rendu** : la
+vidéo elle-même est déjà valide à ce stade, ce sont deux compléments, pas
+des prérequis. Une erreur sur l'un des deux est juste loguée
+(`console.warn`) et laisse le champ correspondant vide/absent, sans
+toucher à l'autre ni à la vidéo.
+
+**Images clés (`extractPreviewFrames`)** — 8 images JPEG extraites à
+intervalles réguliers sur toute la durée de la vidéo (via `ffmpeg -ss ...
+-frames:v 1`, un appel par image, en parallèle), aux centres de 8 segments
+égaux (jamais la toute première ni la toute dernière frame, plus
+susceptibles d'être un cut/bumper noir que du contenu représentatif).
+Chaque image est servie par une nouvelle route, sur le même principe que
+la vidéo (même cycle de vie/rétention de 30 min, même clé API) :
+
+```
+GET /render/frame/:jobId/:index   (index de 0 à 7)
+```
+
+**Transcription (`transcribeVoiceover`)** — la piste audio du fichier
+final (voix off + musique de fond éventuelle mixée dessous — Whisper
+tolère bien un fond sonore discret) est transcrite en texte, entièrement
+en local via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+(modèle `base`, quantification `int8` pour rester léger en ressources sur
+un VPS sans GPU) — pas d'API payante, l'audio ne quitte jamais le serveur.
+`server/transcribe.py` fait le travail ; `render-server.js` extrait
+d'abord un wav 16kHz mono (`ffmpeg -vn -acodec pcm_s16le -ar 16000 -ac 1`,
+le format que Whisper attend nativement) puis appelle ce script comme
+sous-processus Python.
+
+**Prérequis (transcription uniquement)** — contrairement aux images clés
+(seulement ffmpeg, déjà requis), la transcription a besoin de :
+
+```console
+pip3 install faster-whisper
+```
+
+Le modèle `base` (~150 Mo) est téléchargé automatiquement au tout premier
+appel (via `huggingface_hub`, mis en cache ensuite dans
+`~/.cache/huggingface`) — la toute première transcription après
+l'installation sera donc plus lente que les suivantes, et nécessite un
+accès réseau sortant vers `huggingface.co` à ce moment-là. Si
+`faster-whisper` n'est pas installé (ou si ce tout premier téléchargement
+échoue), la transcription est simplement absente pour ce rendu
+(`transcribed_audio: null`), sans erreur ni impact sur le reste — tu peux
+donc déployer cette fonctionnalité plus tard sans rien casser d'ici là.
+
+**Réponse de `GET /render/status/:jobId`** une fois `status: "done"` :
+
+```json
+{
+  "status": "done",
+  "videoUrl": "https://.../render/result/abc123",
+  "preview_frames": [
+    "https://.../render/frame/abc123/0",
+    "https://.../render/frame/abc123/1"
+  ],
+  "transcribed_audio": "Ton bac vire au vert ? ..."
+}
+```
+
+`preview_frames` est toujours un tableau (vide si l'extraction a échoué) ;
+`transcribed_audio` est soit une chaîne, soit `null`.
+
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
 Un petit serveur (`server/render-server.js`) expose trois routes : tu lui
@@ -438,8 +505,11 @@ d'attente entre le 2ᵉ et le 3ᵉ) au lieu d'un seul :
 - Ajoute un délai (module "Sleep", ~5-10s) puis un module HTTP `GET`
   `https://xxxx.ngrok-free.app/render/status/{{jobId du module 1}}`
   (même en-tête `x-api-key` si configuré)
-- Renvoie `{"status": "processing"}`, `{"status": "done", "videoUrl": "..."}`
-  ou `{"status": "error", "message": "..."}`
+- Renvoie `{"status": "processing"}`, `{"status": "done", "videoUrl": "...",
+  "preview_frames": [...], "transcribed_audio": "..."}` (ces deux derniers
+  champs, voir section "Images clés et transcription" plus haut — utilise-les
+  directement depuis la réponse de ce module, pas besoin d'un 4e appel) ou
+  `{"status": "error", "message": "..."}`
 - Enveloppe ces deux étapes (Sleep + HTTP status) dans un **Repeater** ou une
   branche conditionnelle qui reboucle tant que `status = "processing"`, et
   sort dès que `status` vaut `"done"` (continuer vers le module 3) ou

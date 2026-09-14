@@ -14,3 +14,7 @@ server/.rush-rotation-state.json
 # rendering, deleted again once each job's retention window ends) — see
 # VOICEOVER_TMP_DIR in server/render-server.js. Runtime data, not source.
 public/tmp-voiceovers/
+
+# Python bytecode cache (server/transcribe.py).
+__pycache__/
+*.pyc

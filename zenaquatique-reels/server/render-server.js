@@ -100,6 +100,10 @@ const jobs = new Map();
 // (see finishJob below), not from job creation, so a slow render itself is
 // never cut short by this.
 const JOB_RETENTION_MS = 30 * 60 * 1000;
+// How many preview frames extractPreviewFrames pulls from the final video,
+// evenly spread across its duration (see there) — within the "8 à 10"
+// requested.
+const PREVIEW_FRAME_COUNT = 8;
 
 const finishJob = (jobId, result) => {
   const job = jobs.get(jobId);
@@ -114,6 +118,11 @@ const finishJob = (jobId, result) => {
     }
     if (current?.voiceoverFiles) {
       for (const filePath of current.voiceoverFiles) {
+        fs.unlink(filePath, () => {});
+      }
+    }
+    if (current?.framePaths) {
+      for (const filePath of current.framePaths) {
         fs.unlink(filePath, () => {});
       }
     }
@@ -164,6 +173,86 @@ const applyFaststart = async (jobId, outputPath) => {
   fs.unlinkSync(outputPath);
   fs.renameSync(faststartPath, outputPath);
   console.log(`[${jobId}] faststart appliqué -> ${outputPath}`);
+};
+
+// Extracts PREVIEW_FRAME_COUNT JPEG stills from the final (faststart'd)
+// video, evenly spread across its duration, for the caller to use as
+// thumbnails/previews without downloading the whole video. Timestamps are
+// centered in PREVIEW_FRAME_COUNT equal segments (e.g. for a 20s video and
+// 8 frames: t ≈ 1.25s, 3.75s, 6.25s, ... — never frame 0 or the very last
+// frame, which are more likely to be a hard cut/black bumper than
+// representative content). Runs one ffmpeg seek-and-grab per frame,
+// concurrently (each is a cheap, independent operation).
+//
+// Non-fatal by design (see call site in runRenderJob): a video whose
+// thumbnails failed to extract is still a fully valid, deliverable video —
+// this is an enrichment, not a requirement, unlike applyFaststart above.
+const extractPreviewFrames = async (jobId, videoPath) => {
+  const { durationInSeconds } = await getVideoMetadata(videoPath);
+  const framePaths = await Promise.all(
+    Array.from({ length: PREVIEW_FRAME_COUNT }, async (_, index) => {
+      const timestamp = ((index + 0.5) * durationInSeconds) / PREVIEW_FRAME_COUNT;
+      const framePath = path.join(os.tmpdir(), `${jobId}-frame-${index}.jpg`);
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-ss",
+        timestamp.toFixed(3),
+        "-i",
+        videoPath,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        framePath,
+      ]);
+      return framePath;
+    }),
+  );
+  console.log(`[${jobId}] ${framePaths.length} images clés extraites`);
+  return framePaths;
+};
+
+// Transcribes the final video's voiceover (+ background music mixed under
+// it, if any — Whisper is robust to a quiet bed track) to plain text,
+// fully locally via faster-whisper (server/transcribe.py) — no paid API,
+// no audio ever leaves the server. Extracts a 16kHz mono wav first (the
+// format Whisper's models expect natively, sidestepping any internal
+// resampling) into a throwaway temp file, cleaned up here regardless of
+// outcome.
+//
+// Non-fatal by design (see call site in runRenderJob): requires
+// faster-whisper to be installed separately on the machine running this
+// server (`pip3 install faster-whisper` — a Python package, not an npm
+// dependency) and, the very first time it runs, network access to
+// download the "base" model (~150MB, cached afterward). Neither being
+// true yet is not a render failure — transcribedAudio simply comes back
+// null and a clear reason is logged, same as a music folder being empty.
+const transcribeVoiceover = async (jobId, videoPath) => {
+  const audioPath = path.join(os.tmpdir(), `${jobId}-transcribe.wav`);
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      videoPath,
+      "-vn",
+      "-acodec",
+      "pcm_s16le",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      audioPath,
+    ]);
+    const { stdout } = await execFileAsync("python3", [
+      path.join(__dirname, "transcribe.py"),
+      audioPath,
+    ]);
+    const transcript = stdout.trim();
+    console.log(`[${jobId}] Transcription: "${transcript}"`);
+    return transcript;
+  } finally {
+    fs.unlink(audioPath, () => {});
+  }
 };
 
 let bundleLocationPromise = null;
@@ -607,7 +696,30 @@ const runRenderJob = async (jobId, formatKey, compositionConfig, inputProps) => 
     // that would fail those platforms' validators anyway.
     await applyFaststart(jobId, outputPath);
 
-    finishJob(jobId, { status: "done", videoPath: outputPath, format: formatKey, voiceoverFiles });
+    // Preview frames + transcription are enrichments, not requirements —
+    // unlike applyFaststart above, a failure here must never fail the
+    // whole job (the video itself already rendered fine). Each is caught
+    // independently so one failing doesn't take out the other, and they
+    // run concurrently since neither depends on the other's result.
+    const [framePaths, transcribedAudio] = await Promise.all([
+      extractPreviewFrames(jobId, outputPath).catch((error) => {
+        console.warn(`[${jobId}] Extraction des images clés échouée:`, error.message || error);
+        return [];
+      }),
+      transcribeVoiceover(jobId, outputPath).catch((error) => {
+        console.warn(`[${jobId}] Transcription échouée:`, error.message || error);
+        return null;
+      }),
+    ]);
+
+    finishJob(jobId, {
+      status: "done",
+      videoPath: outputPath,
+      format: formatKey,
+      voiceoverFiles,
+      framePaths,
+      transcribedAudio,
+    });
   } catch (error) {
     console.error(`[${jobId}] Échec du rendu:`, error);
     if (outputPath) {
@@ -756,8 +868,50 @@ app.get("/render/status/:jobId", (req, res) => {
     return;
   }
 
-  const videoUrl = `${req.protocol}://${req.get("host")}/render/result/${req.params.jobId}`;
-  res.json({ status: "done", videoUrl });
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const videoUrl = `${baseUrl}/render/result/${req.params.jobId}`;
+  const previewFrames = (job.framePaths ?? []).map(
+    (_filePath, index) => `${baseUrl}/render/frame/${req.params.jobId}/${index}`,
+  );
+  res.json({
+    status: "done",
+    videoUrl,
+    preview_frames: previewFrames,
+    transcribed_audio: job.transcribedAudio ?? null,
+  });
+});
+
+app.get("/render/frame/:jobId/:index", (req, res) => {
+  if (API_KEY && req.header("x-api-key") !== API_KEY) {
+    res.status(401).json({ error: "Clé API invalide ou manquante (en-tête x-api-key)." });
+    return;
+  }
+
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: "jobId inconnu (jamais créé, ou expiré)." });
+    return;
+  }
+  if (job.status !== "done") {
+    res.status(409).json({ error: `Rendu pas encore terminé (status: ${job.status}).` });
+    return;
+  }
+
+  const index = Number(req.params.index);
+  const framePath = job.framePaths?.[index];
+  if (!framePath) {
+    res.status(404).json({ error: `Image clé ${req.params.index} inconnue pour ce job.` });
+    return;
+  }
+
+  res.setHeader("Content-Type", "image/jpeg");
+  // Same retention contract as /render/result/:jobId — not deleted here,
+  // kept until the JOB_RETENTION_MS cleanup timer fires (see finishJob).
+  res.sendFile(framePath, (err) => {
+    if (err && !res.headersSent) {
+      res.status(500).json({ error: "Échec de l'envoi de l'image clé." });
+    }
+  });
 });
 
 app.get("/render/result/:jobId", (req, res) => {
@@ -792,6 +946,9 @@ app.listen(PORT, () => {
   console.log(`Serveur de rendu Versus démarré sur http://localhost:${PORT}`);
   console.log(`Endpoints à appeler depuis Make:`);
   console.log(`  POST   http://localhost:${PORT}/render               -> { jobId, status }`);
-  console.log(`  GET    http://localhost:${PORT}/render/status/:jobId -> { status, videoUrl? }`);
-  console.log(`  GET    http://localhost:${PORT}/render/result/:jobId -> le fichier mp4`);
+  console.log(
+    `  GET    http://localhost:${PORT}/render/status/:jobId -> { status, videoUrl?, preview_frames?, transcribed_audio? }`,
+  );
+  console.log(`  GET    http://localhost:${PORT}/render/result/:jobId       -> le fichier mp4`);
+  console.log(`  GET    http://localhost:${PORT}/render/frame/:jobId/:index -> une image clé (jpeg)`);
 });
