@@ -64,10 +64,10 @@ Placez vos rushes dans `public/video/rushes/` (ou tout autre sous-dossier de
 **pas du tout envoyé** dans la requête (différent d'un tableau vide, voir
 ci-dessus), `server/render-server.js` choisit lui-même les rushes à la
 place de Make — plus besoin de gérer une rotation côté Make. Il liste
-`public/video/rushes/` (fichiers `.mp4`/`.mov`, triés par nom), en pioche
-jusqu'à 2 comme coupes courtes pour le Hook, puis pioche **autant de clips
-que nécessaire** pour la partie qui joue derrière Option A/B/Verdict —
-**le nombre n'est plus fixé à 3** :
+`public/video/rushes/` (fichiers `.mp4`/`.mov`), en pioche jusqu'à 2 comme
+coupes courtes pour le Hook, puis pioche **autant de clips que nécessaire**
+pour la partie qui joue derrière Option A/B/Verdict — **le nombre n'est
+plus fixé à 3** :
 
 - Si les rushes piochés pour cette partie totalisent déjà assez de durée
   (souvent : 1 seul clip assez long), le rendu s'arrête là — 3 rushes au
@@ -78,12 +78,34 @@ que nécessaire** pour la partie qui joue derrière Option A/B/Verdict —
   trop court" ci-dessous — ce mécanisme reste un filet de sécurité pour le
   tout dernier clip, mais n'est presque plus jamais nécessaire).
 
-Chaque rendu avance le curseur de rotation partagé du **nombre réel** de
-rushes utilisés cette fois-ci (3, 4, 5...), jamais un nombre fixe — sinon
-la rotation se désynchroniserait (des rushes reviendraient plus souvent
-que d'autres, ou seraient sautés). Deux rendus consécutifs n'utilisent
-donc jamais la même combinaison, et le curseur boucle proprement une fois
-tout le dossier parcouru. Il est persisté dans
+**Équilibrage par catégorie** — la rotation n'est plus un simple curseur
+qui avance dans l'ordre alphabétique du dossier (ça clusterait les rushes
+par catégorie plutôt que de varier, puisque le tri par défaut classe les
+majuscules avant les minuscules : tous les `Neocaridina .../Limnobium ...`
+avant tout `general_...`). Chaque fichier est classé à partir de son nom
+(nom d'espèce en toutes lettres + `_NN`, ou `general_NN` pour les rushes
+génériques) :
+
+- commence par `general` → catégorie **general**
+- sinon, commence par `Neocaridina` (le genre de toutes les crevettes
+  vendues) → catégorie **crevettes**, espèce = le nom complet
+- sinon → catégorie **plantes** (par élimination — une nouvelle espèce de
+  plante n'a donc besoin d'aucune modification de code), espèce = le nom
+  complet
+
+Chaque rendu place **un rush `general` en premier** (s'il en existe au
+moins un) — donc quasi systématiquement parmi les 3 premiers rushes
+choisis (les coupes du Hook) — puis alterne entre les différentes espèces
+disponibles, en reléguant en dernier celles utilisées lors du rendu
+précédent : deux rendus consécutifs n'utilisent donc jamais exactement la
+même paire crevette/plante, sauf si le nombre d'espèces disponibles est
+trop faible pour l'éviter. À l'intérieur d'une même espèce qui a plusieurs
+clips numérotés, ceux-ci tournent aussi (jamais toujours `_01`).
+
+Chaque rendu avance l'état de rotation du **nombre réel** de rushes
+utilisés cette fois-ci (3, 4, 5...), jamais un nombre fixe — sinon la
+rotation se désynchroniserait (des rushes reviendraient plus souvent que
+d'autres, ou seraient sautés). Il est persisté dans
 `server/.rush-rotation-state.json` (pas commité dans Git — état
 d'exécution, pas du code) pour survivre à un redémarrage du serveur, pas
 seulement entre deux rendus de la même session. Dossier vide/introuvable

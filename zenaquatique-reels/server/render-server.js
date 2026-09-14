@@ -480,24 +480,168 @@ const pickMusicTrack = (seed) => {
 // tail) — only the tail count changed, see pickRushesForTailDuration.
 const RUSH_GROUP_SIZE = MAX_CLIPS;
 
-const readRushRotationCursor = () => {
+// Classifies one rush filename into a category + species, from the naming
+// convention actually used in public/video/rushes/: the species name in
+// full (with spaces), followed by "_NN" and the extension — e.g.
+// "Neocaridina Blue Velvette_01.mov" — except generic filler clips, named
+// "general_NN". "Neocaridina" is the genus of every shrimp species sold
+// (→ "crevettes"); anything else that isn't "general" is a plant species
+// (→ "plantes") by elimination, deliberately not an enumerated list, so a
+// newly added plant species needs no code change here.
+const classifyRushFile = (file) => {
+  const stem = path.basename(file, path.extname(file));
+  const name = stem.replace(/_\d+$/, "").trim();
+  if (/^general/i.test(name)) {
+    return { category: "general", species: null };
+  }
+  if (/^Neocaridina/i.test(name)) {
+    return { category: "crevettes", species: name };
+  }
+  return { category: "plantes", species: name };
+};
+
+const readRushRotationState = () => {
   try {
     const parsed = JSON.parse(fs.readFileSync(RUSH_ROTATION_STATE_FILE, "utf8"));
-    return typeof parsed.cursor === "number" && Number.isFinite(parsed.cursor) ? parsed.cursor : 0;
+    return {
+      generalCursor: Number.isFinite(parsed.generalCursor) ? parsed.generalCursor : 0,
+      speciesCursor:
+        parsed.speciesCursor && typeof parsed.speciesCursor === "object" ? parsed.speciesCursor : {},
+      speciesRotationCursor: Number.isFinite(parsed.speciesRotationCursor)
+        ? parsed.speciesRotationCursor
+        : 0,
+      lastSpecies: Array.isArray(parsed.lastSpecies) ? parsed.lastSpecies : [],
+    };
   } catch {
-    return 0;
+    return { generalCursor: 0, speciesCursor: {}, speciesRotationCursor: 0, lastSpecies: [] };
   }
 };
 
-const writeRushRotationCursor = (cursor) => {
+const writeRushRotationState = (state) => {
   try {
-    fs.writeFileSync(RUSH_ROTATION_STATE_FILE, JSON.stringify({ cursor }), "utf8");
+    fs.writeFileSync(RUSH_ROTATION_STATE_FILE, JSON.stringify(state), "utf8");
   } catch (error) {
     console.warn(
-      "Impossible d'enregistrer le curseur de rotation des rushes:",
+      "Impossible d'enregistrer l'état de rotation des rushes:",
       error.message || error,
     );
   }
+};
+
+// Builds this render's full pick order — every file in rushFiles, each
+// exactly once — balanced across categories instead of the raw
+// alphabetical listing pickRushesForTailDuration used to draw from
+// directly. That raw order was the actual bug: JS's default string sort
+// orders by UTF-16 code point, so every capitalized species filename
+// ("Neocaridina ...", "Limnobium ...") sorts before any lowercase
+// "general_..." one — the round-robin cursor could spend many renders in a
+// row cycling only through species clips before ever reaching a general
+// one, and never intentionally varied which species paired together.
+//
+// Slot 0 is always a general clip when any exist, so it's included in
+// (effectively) every render's first RUSH_GROUP_SIZE (3) picks — the intro
+// clips shown during the Hook. Everything after it round-robins across
+// distinct species (one clip per species per pass), with species used in
+// the immediately previous render pushed to the back of that rotation so
+// two consecutive renders don't repeat the same crevette/plante pairing
+// unless the pool is too small to avoid it.
+const buildRushPickPlan = (rushFiles, state) => {
+  const general = [];
+  const speciesFiles = new Map();
+  for (const file of rushFiles) {
+    const { category, species } = classifyRushFile(file);
+    if (category === "general") {
+      general.push(file);
+    } else {
+      if (!speciesFiles.has(species)) {
+        speciesFiles.set(species, []);
+      }
+      speciesFiles.get(species).push(file);
+    }
+  }
+  general.sort();
+  for (const files of speciesFiles.values()) {
+    files.sort();
+  }
+
+  const allSpecies = [...speciesFiles.keys()].sort();
+  const rotationStart = allSpecies.length > 0 ? state.speciesRotationCursor % allSpecies.length : 0;
+  const rotatedSpecies = [...allSpecies.slice(rotationStart), ...allSpecies.slice(0, rotationStart)];
+  const speciesOrder = [
+    ...rotatedSpecies.filter((species) => !state.lastSpecies.includes(species)),
+    ...rotatedSpecies.filter((species) => state.lastSpecies.includes(species)),
+  ];
+
+  // Each species' own files, rotated to that species' persisted cursor so
+  // a species with several numbered clips cycles through all of them over
+  // time instead of always starting at _01.
+  const speciesSequences = new Map(
+    allSpecies.map((species) => {
+      const files = speciesFiles.get(species);
+      const cursor = (state.speciesCursor[species] ?? 0) % files.length;
+      return [species, [...files.slice(cursor), ...files.slice(0, cursor)]];
+    }),
+  );
+  const generalCursor = general.length > 0 ? state.generalCursor % general.length : 0;
+  const generalSequence =
+    general.length > 0 ? [...general.slice(generalCursor), ...general.slice(0, generalCursor)] : [];
+
+  const order = [];
+  const sources = []; // parallel array: "general" or the species name, for the cursor bookkeeping below
+  if (generalSequence.length > 0) {
+    order.push(generalSequence[0]);
+    sources.push("general");
+  }
+  const maxSpeciesLen = Math.max(0, ...[...speciesSequences.values()].map((seq) => seq.length));
+  for (let i = 0; i < maxSpeciesLen; i += 1) {
+    for (const species of speciesOrder) {
+      const seq = speciesSequences.get(species);
+      if (seq && i < seq.length) {
+        order.push(seq[i]);
+        sources.push(species);
+      }
+    }
+  }
+  // Any remaining general clips fill out the rest, so a long video needing
+  // more tail clips than there are species files can still draw on them.
+  for (let i = 1; i < generalSequence.length; i += 1) {
+    order.push(generalSequence[i]);
+    sources.push("general");
+  }
+
+  return { order, sources, general, speciesFiles, allSpecies };
+};
+
+// Persists the rotation state forward by exactly how many clips this
+// render actually consumed (`consumedCount`, from the plan built above) —
+// same "advance by what was really used, not a fixed amount" contract the
+// old flat cursor had, just tracked per-category/per-species now.
+const advanceRushRotationState = (state, plan, consumedCount) => {
+  const consumedSources = plan.sources.slice(0, consumedCount);
+  const speciesTakenCounts = {};
+  let generalTaken = 0;
+  for (const source of consumedSources) {
+    if (source === "general") {
+      generalTaken += 1;
+    } else {
+      speciesTakenCounts[source] = (speciesTakenCounts[source] ?? 0) + 1;
+    }
+  }
+
+  const speciesCursor = { ...state.speciesCursor };
+  for (const [species, count] of Object.entries(speciesTakenCounts)) {
+    const total = plan.speciesFiles.get(species).length;
+    speciesCursor[species] = ((state.speciesCursor[species] ?? 0) + count) % total;
+  }
+
+  writeRushRotationState({
+    generalCursor:
+      plan.general.length > 0 ? (state.generalCursor + generalTaken) % plan.general.length : state.generalCursor,
+    speciesCursor,
+    speciesRotationCursor:
+      plan.allSpecies.length > 0 ? (state.speciesRotationCursor + 1) % plan.allSpecies.length : state.speciesRotationCursor,
+    lastSpecies: Object.keys(speciesTakenCounts),
+  });
 };
 
 // Probes every candidate rush file's real duration in one batch (cheap:
@@ -532,14 +676,13 @@ const probeRushDurationsInSeconds = async (files) => {
 // span), but with this the very last picked clip essentially never needs
 // it in practice.
 //
-// Every render advances the shared rotation cursor by exactly the number
-// of files it actually used (not always RUSH_GROUP_SIZE) — see
-// readRushRotationCursor/writeRushRotationCursor — so a render that needed
-// 5 rushes doesn't leave 2 "owed", and the next render's first pick is
-// always the very next unused file, whatever ran before it. Returns
-// undefined (→ falls back to no video background, same as an empty/missing
-// `clips`) when the folder is missing, empty, or contains no recognized
-// rush file.
+// Every render advances the rotation state by exactly the number of files
+// it actually used (not always RUSH_GROUP_SIZE) — see
+// buildRushPickPlan/advanceRushRotationState above — so a render that
+// needed 5 rushes doesn't leave 2 "owed", and the next render's picks
+// continue on from there, whatever ran before it. Returns undefined
+// (→ falls back to no video background, same as an empty/missing `clips`)
+// when the folder is missing, empty, or contains no recognized rush file.
 const pickRushesForTailDuration = async (tailDurationInFrames, fps) => {
   let files;
   try {
@@ -555,25 +698,26 @@ const pickRushesForTailDuration = async (tailDurationInFrames, fps) => {
   }
 
   const durationsInSeconds = await probeRushDurationsInSeconds(rushFiles);
-  const cursor = readRushRotationCursor() % rushFiles.length;
-  let offset = 0;
-  const nextFile = () => {
-    const file = rushFiles[(cursor + offset) % rushFiles.length];
-    offset += 1;
-    return file;
-  };
   const toClip = (file) => ({
     src: `video/rushes/${file}`,
     durationInSeconds: durationsInSeconds[file],
   });
 
   // Only one rush exists at all: it serves as both intro and tail (same
-  // special case planClips itself falls back to), nothing more to pick.
+  // special case planClips itself falls back to), nothing more to pick —
+  // no category/species balancing is meaningful with a single file.
   if (rushFiles.length === 1) {
-    const clip = toClip(nextFile());
-    writeRushRotationCursor(cursor);
-    return { clips: [clip], tailCount: 1 };
+    return { clips: [toClip(rushFiles[0])], tailCount: 1 };
   }
+
+  const state = readRushRotationState();
+  const plan = buildRushPickPlan(rushFiles, state);
+  let offset = 0;
+  const nextFile = () => {
+    const file = plan.order[offset];
+    offset += 1;
+    return file;
+  };
 
   const introCount = Math.min(RUSH_GROUP_SIZE - 1, rushFiles.length - 1);
   const introClips = Array.from({ length: introCount }, () => toClip(nextFile()));
@@ -597,7 +741,7 @@ const pickRushesForTailDuration = async (tailDurationInFrames, fps) => {
     }
   }
 
-  writeRushRotationCursor((cursor + offset) % rushFiles.length);
+  advanceRushRotationState(state, plan, offset);
 
   return { clips: [...introClips, ...tailClips], tailCount: tailClips.length };
 };
