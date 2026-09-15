@@ -105,10 +105,20 @@ const JOB_RETENTION_MS = 60 * 60 * 1000;
 // requested.
 const PREVIEW_FRAME_COUNT = 8;
 // How many of those preview frames analyzeFrames sends to moondream2 for
-// visual_critique — a subset (start/middle/end) rather than all
-// PREVIEW_FRAME_COUNT, since each is a slow CPU inference and this is meant
-// to catch obvious defects, not review every frame.
-const VISUAL_CRITIQUE_FRAME_COUNT = 4;
+// visual_critique — a subset (start/end) rather than all
+// PREVIEW_FRAME_COUNT, since each is a slow CPU inference (observed on the
+// VPS: ~1.5 minutes per image with no GPU) and this is meant to catch
+// obvious defects, not review every frame. Kept at 2 rather than more to
+// keep the total render time within the Make polling window that waits
+// for the job to reach "done".
+const VISUAL_CRITIQUE_FRAME_COUNT = 2;
+// Safety net for analyzeFrames' subprocess call — execFile has no timeout
+// by default, so without this a stuck/hung Python process (unlikely, but
+// possible: a corrupt model download, a wedged first-run HF Hub fetch)
+// would block the job from ever reaching "done". Generous on purpose: a
+// legitimately slow-but-working CPU inference (several minutes for 2
+// images) must never be mistaken for a hang.
+const VISUAL_CRITIQUE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const finishJob = (jobId, result) => {
   const job = jobs.get(jobId);
@@ -295,7 +305,7 @@ const analyzeFrames = async (jobId, framePaths) => {
   const { stdout } = await execFileAsync(
     "python3",
     [path.join(__dirname, "visual_critique.py"), ...selectedFrames],
-    { maxBuffer: 10 * 1024 * 1024 },
+    { maxBuffer: 10 * 1024 * 1024, timeout: VISUAL_CRITIQUE_TIMEOUT_MS },
   );
   const critique = stdout
     .trim()

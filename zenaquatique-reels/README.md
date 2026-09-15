@@ -416,12 +416,23 @@ accès réseau sortant vers `huggingface.co` à ce moment-là. Si
 (`transcribed_audio: null`), sans erreur ni impact sur le reste — tu peux
 donc déployer cette fonctionnalité plus tard sans rien casser d'ici là.
 
-**Critique visuelle (`analyzeFrames`)** — 4 des images clés déjà extraites
-ci-dessus (la première, la dernière, et deux réparties entre les deux —
-début/milieu/fin) sont analysées par
+**Critique visuelle (`analyzeFrames`)** — 2 des images clés déjà extraites
+ci-dessus (la première et la dernière) sont analysées par
 [moondream2](https://huggingface.co/vikhyatk/moondream2), un petit modèle
 de vision-langage open source, avec un prompt qui demande une description
-et tout défaut visuel évident (flou, cadrage, incohérence). Les réponses
+et tout défaut visuel évident (flou, cadrage, incohérence). Le prompt est
+volontairement en anglais malgré le reste du projet en français : cette
+révision de moondream2 (`2024-08-26`, un petit modèle assez ancien) est
+entraînée surtout sur des données anglaises et décroche sur un prompt
+français à deux volets (testé sur le VPS : elle se contentait de répéter
+la question au lieu d'y répondre) — le texte généré n'a pas besoin d'être
+en français puisque seul le module Claude côté Make le lit ensuite pour
+produire la critique finale. Limité à 2 images plutôt que plus : chaque
+inférence CPU
+prend plusieurs minutes sur un VPS sans GPU (observé : ~1.5 min/image), et
+`analyzeFrames` a un timeout de sécurité de 10 minutes (`execFile` n'en a
+aucun par défaut) au cas où le sous-processus se bloquerait vraiment (pas
+juste lent). Les réponses
 sont combinées en un seul texte. `server/visual_critique.py` fait le
 travail, appelé comme sous-processus Python — même principe que
 `transcribe.py`.
