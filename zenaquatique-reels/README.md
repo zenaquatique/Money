@@ -438,9 +438,16 @@ elle, tourne bien sur CPU.
 requis pour les images clés) :
 
 ```console
-pip3 install --break-system-packages torch --index-url https://download.pytorch.org/whl/cpu
+pip3 install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip3 install --break-system-packages transformers einops pillow
 ```
+
+`torchvision` est requis par le fichier de modèle dynamique de moondream2
+(`trust_remote_code=True` télécharge et exécute du code Python qui
+l'importe) — sans lui, le chargement du modèle échoue avec `ImportError:
+... requires ... torchvision`, et `visual_critique` revient `null` à
+chaque rendu (graceful failure, ne casse pas le job, mais le champ ne sert
+à rien tant que la dépendance manque).
 
 (Le premier `pip3 install torch` sans préciser cet index télécharge par
 défaut la variante CUDA, plusieurs Go pour rien sur un serveur sans GPU —
