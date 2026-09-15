@@ -439,8 +439,19 @@ requis pour les images clés) :
 
 ```console
 pip3 install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
-pip3 install --break-system-packages transformers einops pillow accelerate
+pip3 install --break-system-packages transformers==4.44.0 accelerate==0.32.1 einops==0.8.0 timm==0.9.12 pillow
 ```
+
+**`transformers` doit être pin sur `4.44.0` (pas la dernière version)** —
+`transformers>=5.0.0` a introduit une régression qui casse le chargement
+de nombreux modèles `trust_remote_code=True` basés sur `PhiConfig` (dont
+moondream2) : `AttributeError: 'PhiConfig' object has no attribute
+'pad_token_id'`. `4.44.0` est la version que le
+[HF Space officiel de moondream2](https://huggingface.co/spaces/vikhyatk/moondream2/blob/9098c9e20d57a14981f40647ff75fd8e9d59b0a8/requirements.txt)
+pin pour cette même révision (`2024-08-26`, voir `MODEL_REVISION` dans
+`server/visual_critique.py`) — `accelerate`/`einops`/`timm` sont pin aux
+mêmes versions que ce fichier pour éviter tout conflit croisé (ex.
+`tokenizers`) entre eux.
 
 `torchvision` est requis par le fichier de modèle dynamique de moondream2
 (`trust_remote_code=True` télécharge et exécute du code Python qui
@@ -449,9 +460,10 @@ l'importe) — sans lui, le chargement du modèle échoue avec `ImportError:
 dès qu'on passe un `device_map` (ce que fait `visual_critique.py` pour
 forcer l'exécution CPU) — sans lui, `from_pretrained` échoue avec
 `ValueError: Using a device_map ... requires accelerate`. Sans l'une ou
-l'autre de ces deux dépendances, `visual_critique` revient `null` à chaque
-rendu (graceful failure, ne casse pas le job, mais le champ ne sert à rien
-tant que la dépendance manque).
+l'autre de ces dépendances (ou avec la mauvaise version de
+`transformers`), `visual_critique` revient `null` à chaque rendu (graceful
+failure, ne casse pas le job, mais le champ ne sert à rien tant que la
+dépendance manque ou est incompatible).
 
 (Le premier `pip3 install torch` sans préciser cet index télécharge par
 défaut la variante CUDA, plusieurs Go pour rien sur un serveur sans GPU —

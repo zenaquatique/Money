@@ -31,6 +31,15 @@ PROMPT = (
 MODEL_ID = "vikhyatk/moondream2"
 MODEL_REVISION = "2024-08-26"
 
+# This revision's remote code needs transformers==4.44.0 specifically —
+# transformers>=5.0.0 dropped pad_token_id from PhiConfig (the base this
+# revision's model class extends), so from_pretrained() fails with
+# "AttributeError: 'PhiConfig' object has no attribute 'pad_token_id'" on
+# anything newer. See README.md's "critique visuelle" prerequisites section
+# for the exact pinned install command (transformers/accelerate/einops/timm
+# all pinned together, matching moondream2's own HF Space requirements.txt
+# for this revision, to avoid cross-dependency conflicts).
+
 
 def main() -> int:
     if len(sys.argv) < 2:
