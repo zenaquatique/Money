@@ -49,23 +49,32 @@ def main() -> int:
     image_paths = sys.argv[1:]
 
     try:
+        import torch
         from PIL import Image
         from transformers import AutoModelForCausalLM
     except ImportError:
         print(
-            "transformers/Pillow ne sont pas installés. Sur le VPS : "
+            "transformers/torch/Pillow ne sont pas installés. Sur le VPS : "
             "pip3 install --break-system-packages torch --index-url "
             "https://download.pytorch.org/whl/cpu && "
-            "pip3 install --break-system-packages transformers einops pillow",
+            "pip3 install --break-system-packages transformers==4.44.0 "
+            "accelerate==0.32.1 einops==0.8.0 timm==0.9.12 pillow",
             file=sys.stderr,
         )
         return 1
 
+    # bfloat16 instead of the default float32 halves the model's memory
+    # footprint (~3.8GB instead of ~7.6GB for this ~1.9B-parameter model) —
+    # float32 alone was enough to OOM-kill this process on the VPS's 7.8GB
+    # of RAM (no swap configured). bfloat16 is well-supported for CPU
+    # inference in PyTorch, unlike float16 which has spottier CPU op
+    # coverage.
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         revision=MODEL_REVISION,
         trust_remote_code=True,
         device_map={"": "cpu"},
+        torch_dtype=torch.bfloat16,
     )
 
     # Older moondream2 revisions only expose encode_image/answer_question;

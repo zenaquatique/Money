@@ -473,7 +473,19 @@ Le modèle moondream2 (~3.7 Go) est téléchargé automatiquement au tout
 premier appel (mis en cache ensuite dans `~/.cache/huggingface`, comme
 Whisper ci-dessus) — nécessite un accès réseau sortant vers
 `huggingface.co` à ce moment-là, et l'inférence CPU est lente (plusieurs
-secondes par image). Si `transformers`/`torch` ne sont pas installés (ou
+secondes par image).
+
+**Mémoire** — `visual_critique.py` charge le modèle en `bfloat16` plutôt
+que le `float32` par défaut de transformers, pour rester autour de ~3.8 Go
+de RAM au lieu de ~7.6 Go (moondream2 fait ~1.9 milliard de paramètres —
+4 octets/paramètre en float32 vs 2 en bfloat16). Sans ça, le process se
+fait tuer par l'OOM killer du noyau sur un VPS avec peu de RAM et pas de
+swap (observé avec un `Out of memory: Killed process ... python3` dans
+`dmesg` sur un VPS à 7.8 Go de RAM). Si `visual_critique` revient encore
+`null` après avoir vérifié les dépendances ci-dessus, vérifie `dmesg | tail
+-50 | grep -i oom` pour écarter un nouvel OOM kill.
+
+Si `transformers`/`torch` ne sont pas installés (ou
 si ce tout premier téléchargement échoue), la critique visuelle est
 simplement absente pour ce rendu (`visual_critique: null`), sans erreur ni
 impact sur le reste.
