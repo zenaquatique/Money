@@ -23,9 +23,17 @@ than every one after it.
 
 import sys
 
+# English, single direct instruction — this small/early moondream2
+# revision (2024-08-26) is trained mostly on English data and struggles
+# with a compound French question (observed on the VPS: it just echoed
+# the question back instead of answering, for most frames). The output
+# itself doesn't need to be French: it only ever gets read by the Claude
+# prompt in Make that synthesizes the final French critique, never shown
+# to a person directly.
 PROMPT = (
-    "Décris cette image issue d'une vidéo produit. "
-    "Y a-t-il un problème visuel évident (flou, cadrage, incohérence) ?"
+    "Describe this still from a product video in one short sentence, then "
+    "note any obvious visual defect (blur, bad framing, inconsistency). "
+    "If there is no defect, say so."
 )
 
 MODEL_ID = "vikhyatk/moondream2"
