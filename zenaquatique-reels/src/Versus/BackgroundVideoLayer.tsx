@@ -1,7 +1,6 @@
 import React from "react";
 import {
   AbsoluteFill,
-  Audio,
   interpolate,
   Loop,
   OffthreadVideo,
@@ -11,7 +10,6 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { SFX_FILES } from "./sfx";
 import type { ShotEffect, VersusClip } from "./types";
 
 const resolveClipSrc = (src: string): string =>
@@ -110,12 +108,6 @@ const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
 // each re-trimmed to a different random point in the same source clip —
 // a jump cut using the existing rush library, no new footage needed.
 const MAX_SHOT_DURATION_IN_SECONDS = 2.5;
-
-// A short whoosh plays at every cut (see CutSound) — this is how long its
-// own <Sequence> stays mounted; the actual mp3 is shorter and simply
-// finishes playing on its own, this only bounds how long it could run.
-const SFX_DURATION_IN_SECONDS = 0.8;
-const SFX_VOLUME = 0.45;
 
 type Shot = { from: number; durationInFrames: number };
 
@@ -237,41 +229,13 @@ const ClipVideo: React.FC<{
   );
 };
 
-// A short whoosh at a shot's own start frame — skipped at frame 0 of the
-// whole video (nothing to transition *from* yet). Which file plays is
-// picked deterministically from `seed`, same pattern as the background
-// music pick (see pickMusicTrack in server/render-server.js) but done
-// entirely client-side since the small, fixed sfx set ships in the repo
-// (public/audio/sfx/, listed in ./sfx.ts) rather than being probed
-// per-render.
-const CutSound: React.FC<{ from: number; seed: string; fps: number }> = ({
-  from,
-  seed,
-  fps,
-}) => {
-  if (from <= 0) {
-    return null;
-  }
-  const index = Math.floor(random(`${seed}:sfx`) * SFX_FILES.length);
-  const file = SFX_FILES[Math.min(index, SFX_FILES.length - 1)];
-  return (
-    <Sequence
-      from={from}
-      durationInFrames={Math.round(SFX_DURATION_IN_SECONDS * fps)}
-    >
-      <Audio src={staticFile(file)} volume={SFX_VOLUME} />
-    </Sequence>
-  );
-};
-
 // Renders the clip timeline for one render: 1-2 short intro clips shown
 // back to back during the Hook, then one or more clips playing back to
 // back behind the rest of the video (the "tail" — see planClips/tailCount
 // for how many). Every allocation above MAX_SHOT_DURATION_IN_SECONDS is
-// sliced into several jump-cut shots (splitIntoShots) with a whoosh at
-// each cut, so nothing here ever plays as one long static plan. Renders
-// nothing (falls back to the slides' own solid background) when no clips
-// are provided.
+// sliced into several jump-cut shots (splitIntoShots), so nothing here
+// ever plays as one long static plan. Renders nothing (falls back to the
+// slides' own solid background) when no clips are provided.
 export const BackgroundVideoLayer: React.FC<{
   introClips: VersusClip[];
   tailClips: VersusClip[];
@@ -367,9 +331,6 @@ export const BackgroundVideoLayer: React.FC<{
             seed={shotSeed}
           />
         </Sequence>
-      ))}
-      {allShots.map(({ shot, seed: shotSeed, key }) => (
-        <CutSound key={`sfx-${key}`} from={shot.from} seed={shotSeed} fps={fps} />
       ))}
     </AbsoluteFill>
   );

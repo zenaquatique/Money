@@ -400,7 +400,7 @@ reste visible ~1,4s le temps d'être lu, puis s'efface — indépendant de la
 durée du mot karaoké lui-même, pour laisser le temps de lire même un
 chiffre bref comme `"5€"`.
 
-## Rythme visuel dynamique et transitions sonores (`BackgroundVideoLayer`)
+## Rythme visuel dynamique (`BackgroundVideoLayer`)
 
 Avant cette fonctionnalité, un rush pouvait couvrir toute la durée d'une
 slide sans coupe ni mouvement dès lors qu'il était assez long — l'effet
@@ -435,26 +435,21 @@ zoom supplémentaire (`minScaleForRotation` dans `resolveShotMotion`) pour
 ne jamais exposer un coin vide ; vitesse et angle sont bornés (0,6-1,8x,
 ±8°) pour qu'une valeur aberrante ne puisse jamais casser un rendu.
 
-**Transitions sonores** : un bref "whoosh" (0,4-0,6s) joue à chaque coupe
-(sauf à la toute première frame de la vidéo). Les 3 fichiers vivent dans
-`public/audio/sfx/` (`whoosh-1.mp3`, `whoosh-2.mp3`, `whoosh-3.mp3`),
-listés en dur dans `src/Versus/sfx.ts` — contrairement à la musique de
-fond (`public/audio/music/`), pas besoin de sondage côté serveur puisque
-le jeu de fichiers est fixe et fait partie du dépôt. Ces sons ont été
-**synthétisés par script** (bruit blanc filtré passe-bande, fréquence
-centrale balayée, enveloppe douce — voir l'historique de conversation pour
-le détail) plutôt que téléchargés depuis une bibliothèque de sons libres
-de droits externe, l'accès réseau sortant du sandbox de développement
-bloquant les hôtes CC0 usuels (freesound.org, mixkit.co, pixabay,
-opengameart.org, archive.org) — évite au passage toute question de licence
-puisqu'ils sont générés, pas empruntés. Le fichier `whoosh` choisi à
-chaque coupe est random mais déterministe (même `seed` → même choix).
+**Pas de transition sonore** : une première version ajoutait un bref
+"whoosh" synthétisé par script à chaque coupe (aucun accès aux
+bibliothèques CC0 habituelles depuis le sandbox de développement — voir
+l'historique de conversation), mais le rendu sonore était mauvais en
+conditions réelles et a été retiré (`public/audio/sfx/`, `src/Versus/sfx.ts`
+supprimés) — seuls les jump cuts et les mouvements de caméra restent.
+Si de vrais fichiers whoosh (enregistrés ou téléchargés manuellement)
+sont fournis un jour, le point d'intégration est simple à rouvrir : un
+composant `<Audio>` dans un `<Sequence>` au `from` de chaque shot, comme
+c'était fait avant.
 
-Ces trois changements se combinent : plus une slide compte de coupes, plus
-il y a de whooshs et de zooms distincts — un texte long avec plusieurs
-prix (donc plusieurs badges `NumberOverlay`) tombe naturellement sur une
-slide au montage plus dynamique, sans lien direct entre les deux mais un
-effet cohérent à l'écran.
+Combiné à `NumberOverlay` : un texte long avec plusieurs prix (donc
+plusieurs badges) tombe naturellement sur une slide au montage déjà plus
+riche en coupes/zooms, sans lien direct entre les deux mais un effet
+cohérent à l'écran.
 
 ## Qualité de rendu (netteté)
 
