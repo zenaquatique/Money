@@ -16,9 +16,37 @@ export const DEFAULT_VERSUS_DURATIONS_IN_SECONDS: VersusSlideDurations = {
   verdict: 5,
 };
 
+// One of BackgroundVideoLayer's preset camera-movement profiles (scale +
+// pan + rotation curve, see SHOT_STYLES in BackgroundVideoLayer.tsx).
+// Optional and purely a hint: when a clip doesn't set `effect`, a style is
+// picked automatically (still deterministic per render, from `seed`) — so
+// every render is already varied with zero Make/Claude changes required.
+// Setting it explicitly lets the script-generation step *direct* a
+// specific movement for a specific clip instead of leaving it to chance —
+// e.g. informed by a Gemini critique that asked for more punch on a given
+// moment.
+export type ShotEffect =
+  | "zoom_in"
+  | "zoom_out"
+  | "pan_drift"
+  | "tilt_zoom"
+  | "speed_punch";
+
 export type VersusClip = {
   src: string;
   label?: string;
+  // Optional camera-movement override for this clip's shot(s) — see
+  // ShotEffect above. Omitted → picked automatically per shot.
+  effect?: ShotEffect;
+  // Optional playback-speed override (1 = normal). Clamped to a safe
+  // range in BackgroundVideoLayer (0.6-1.8) regardless of what's sent, so
+  // a bad value can't stall or overrun a shot. Omitted → 1, unless the
+  // auto-picked style (`speed_punch`) sets its own.
+  speed?: number;
+  // Optional rotation override in degrees for this clip's shot(s) (small
+  // values only — see clamping in BackgroundVideoLayer). Omitted → 0,
+  // unless the auto-picked style (`tilt_zoom`) sets its own.
+  rotateDeg?: number;
   // Internal: filled in by server/render-server.js (via Remotion's own
   // getVideoMetadata, run once server-side before rendering) when it can
   // determine the source file's real duration. BackgroundVideoLayer uses

@@ -417,10 +417,23 @@ le stock de rushes existant, sans qu'aucune nouvelle vidéo ne soit
 nécessaire. Un plan issu d'un rush trop court pour être re-trimmé retombe
 sur le comportement `<Loop>` déjà existant.
 
-**Mouvement de caméra (Ken Burns)** : chaque plan reçoit en plus un léger
-zoom continu sur sa propre durée (avant→arrière ou arrière→avant, alterné
-par plan via `random(seed)`) — même un plan filmé statique à la prise de
-vue lit comme un mouvement de caméra plutôt qu'une image figée.
+**Mouvement de caméra (5 styles, `ShotEffect`)** : chaque plan reçoit en
+plus un des 5 styles de mouvement de `SHOT_MOTION` (`BackgroundVideoLayer.tsx`) —
+`zoom_in`, `zoom_out`, `pan_drift` (léger travelling latéral), `tilt_zoom`
+(zoom + rotation subtile ±3,5°) ou `speed_punch` (zoom + vitesse de lecture
+x1,25) — même un plan filmé statique à la prise de vue lit comme un
+mouvement de caméra plutôt qu'une image figée. Choisi automatiquement par
+plan via `random(seed)` quand rien n'est précisé (donc déjà varié sans
+aucun changement côté Make), ou imposé explicitement par plan via les
+champs optionnels `effect`/`speed`/`rotateDeg` sur l'objet `clips[i]` (voir
+`ShotEffect`/`VersusClip` dans `src/Versus/types.ts`) — c'est le point
+d'accroche pour qu'une future étape (le prompt Claude, qui reçoit déjà
+`video_quality_lessons`) puisse un jour *diriger* le montage plutôt que de
+laisser le hasard décider. Une rotation demandée explicitement au-delà de
+ce que le style choisi prévoit se voit automatiquement compenser par un
+zoom supplémentaire (`minScaleForRotation` dans `resolveShotMotion`) pour
+ne jamais exposer un coin vide ; vitesse et angle sont bornés (0,6-1,8x,
+±8°) pour qu'une valeur aberrante ne puisse jamais casser un rendu.
 
 **Transitions sonores** : un bref "whoosh" (0,4-0,6s) joue à chaque coupe
 (sauf à la toute première frame de la vidéo). Les 3 fichiers vivent dans

@@ -12,7 +12,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { SFX_FILES } from "./sfx";
-import type { VersusClip } from "./types";
+import type { ShotEffect, VersusClip } from "./types";
 
 const resolveClipSrc = (src: string): string =>
   /^https?:\/\//.test(src) ? src : staticFile(src);
@@ -21,6 +21,70 @@ const coverStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
   objectFit: "cover",
+};
+
+// One motion curve per ShotEffect — scale/pan/rotate as [from, to] pairs
+// interpolated across the shot's own span, plus a playback speed. Every
+// preset overscales a bit past 1 (even "zoom_out" starts above 1) so a
+// panned or rotated frame never shows an empty corner — see the extra
+// margin comment below.
+type ShotMotion = {
+  scaleFrom: number;
+  scaleTo: number;
+  translateXFrom: number; // percent of frame width
+  translateXTo: number;
+  rotateFrom: number; // degrees
+  rotateTo: number;
+  speed: number;
+};
+
+const SHOT_MOTION: Record<ShotEffect, ShotMotion> = {
+  zoom_in: { scaleFrom: 1, scaleTo: 1.12, translateXFrom: 0, translateXTo: 0, rotateFrom: 0, rotateTo: 0, speed: 1 },
+  zoom_out: { scaleFrom: 1.12, scaleTo: 1, translateXFrom: 0, translateXTo: 0, rotateFrom: 0, rotateTo: 0, speed: 1 },
+  pan_drift: { scaleFrom: 1.08, scaleTo: 1.08, translateXFrom: -2.5, translateXTo: 2.5, rotateFrom: 0, rotateTo: 0, speed: 1 },
+  tilt_zoom: { scaleFrom: 1.1, scaleTo: 1.16, translateXFrom: 0, translateXTo: 0, rotateFrom: -3.5, rotateTo: 3.5, speed: 1 },
+  speed_punch: { scaleFrom: 1, scaleTo: 1.08, translateXFrom: 0, translateXTo: 0, rotateFrom: 0, rotateTo: 0, speed: 1.25 },
+};
+
+const SHOT_EFFECTS = Object.keys(SHOT_MOTION) as ShotEffect[];
+
+// Safety clamps for values that can come from Make/Claude (see ShotEffect
+// in types.ts) — kept narrow enough that even a bad value can't stall
+// playback (extreme slow-mo running out of source frames) or look broken
+// (a big rotation exposing empty corners the overscale doesn't cover).
+const clampSpeed = (speed: number): number =>
+  Math.min(1.8, Math.max(0.6, speed));
+const clampRotateDeg = (deg: number): number => Math.min(8, Math.max(-8, deg));
+
+// Resolves one shot's motion: explicit per-clip overrides (`clip.effect`/
+// `clip.speed`/`clip.rotateDeg`, set by the script-generation step —
+// see ShotEffect in types.ts) take priority field by field; anything not
+// overridden falls back to an automatically-picked preset (deterministic
+// per shot from `seed`, so every render is already varied with zero
+// Make/Claude changes required).
+const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
+  const autoEffect =
+    SHOT_EFFECTS[Math.floor(random(`${seed}:style`) * SHOT_EFFECTS.length)];
+  const base = SHOT_MOTION[clip.effect ?? autoEffect];
+  const rotateFrom = clip.rotateDeg !== undefined ? 0 : base.rotateFrom;
+  const rotateTo =
+    clip.rotateDeg !== undefined ? clampRotateDeg(clip.rotateDeg) : base.rotateTo;
+
+  // A rotated frame needs extra overscale to avoid exposing an empty
+  // corner — each preset already overscales enough for its own rotation,
+  // but an explicit `rotateDeg` can exceed what the auto-picked preset
+  // budgeted for, so top up the margin here rather than per-preset.
+  const maxAbsRotate = Math.max(Math.abs(rotateFrom), Math.abs(rotateTo));
+  const minScaleForRotation = 1 + maxAbsRotate * 0.02;
+
+  return {
+    ...base,
+    scaleFrom: Math.max(base.scaleFrom, minScaleForRotation),
+    scaleTo: Math.max(base.scaleTo, minScaleForRotation),
+    rotateFrom,
+    rotateTo,
+    speed: clip.speed !== undefined ? clampSpeed(clip.speed) : base.speed,
+  };
 };
 
 // No background shot ever holds a static, uncut frame for longer than
@@ -82,10 +146,12 @@ const splitIntoShots = (
 // track, see AudioLayer.tsx) to replay it from frame 0 as many times as
 // needed to fill the shot, instead of ever holding a static frame.
 //
-// Also applies a slow "Ken Burns" zoom over the shot's own span (in on
-// some shots, out on others, picked per-shot from `seed`) so even a shot
-// that stays on one static piece of footage still reads as camera
-// movement, not a diaporama slide.
+// Also applies one of a handful of camera-movement presets (zoom, pan,
+// a slight tilt-zoom, or a speed "punch") over the shot's own span — see
+// resolveShotMotion/ShotEffect above — so even a shot that stays on one
+// static piece of footage still reads as camera movement, not a
+// diaporama slide. Auto-picked per shot when the clip doesn't request a
+// specific one.
 const ClipVideo: React.FC<{
   clip: VersusClip;
   allocatedDurationInFrames: number;
@@ -107,16 +173,20 @@ const ClipVideo: React.FC<{
     }
   }
 
-  const zoomIn = random(`${seed}:${clip.src}:zoom`) > 0.5;
+  const motion = resolveShotMotion(clip, `${seed}:${clip.src}`);
   const progress = interpolate(
     frame,
     [0, Math.max(1, allocatedDurationInFrames)],
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  const scale = zoomIn
-    ? interpolate(progress, [0, 1], [1, 1.12])
-    : interpolate(progress, [0, 1], [1.12, 1]);
+  const scale = interpolate(progress, [0, 1], [motion.scaleFrom, motion.scaleTo]);
+  const translateX = interpolate(
+    progress,
+    [0, 1],
+    [motion.translateXFrom, motion.translateXTo],
+  );
+  const rotate = interpolate(progress, [0, 1], [motion.rotateFrom, motion.rotateTo]);
 
   const video = (
     <OffthreadVideo
@@ -124,6 +194,7 @@ const ClipVideo: React.FC<{
       muted
       style={coverStyle}
       trimBefore={trimBefore}
+      playbackRate={motion.speed}
     />
   );
 
@@ -138,7 +209,11 @@ const ClipVideo: React.FC<{
 
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
-      <AbsoluteFill style={{ transform: `scale(${scale})` }}>
+      <AbsoluteFill
+        style={{
+          transform: `scale(${scale}) translateX(${translateX}%) rotate(${rotate}deg)`,
+        }}
+      >
         {body}
       </AbsoluteFill>
     </AbsoluteFill>
