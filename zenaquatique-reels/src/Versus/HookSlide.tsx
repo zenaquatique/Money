@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import type { IconName } from "./icons";
 import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
@@ -8,7 +9,8 @@ export const HookSlide: React.FC<{
   text: string;
   durationInFrames: number;
   hasVideoBackground: boolean;
-}> = ({ brand, text, durationInFrames, hasVideoBackground }) => {
+  icon?: IconName;
+}> = ({ brand, text, durationInFrames, hasVideoBackground, icon }) => {
   const textShadow = hasVideoBackground
     ? "0 2px 16px rgba(0,0,0,0.6)"
     : undefined;
@@ -18,6 +20,7 @@ export const HookSlide: React.FC<{
       background={hasVideoBackground ? "transparent" : colors.deepWater}
       scrim={hasVideoBackground ? colors.scrimNeutral : undefined}
       durationInFrames={durationInFrames}
+      icon={icon}
     >
       <div
         style={{

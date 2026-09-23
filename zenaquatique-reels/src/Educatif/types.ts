@@ -1,5 +1,6 @@
 import type { MusicTrack } from "../Versus/AudioLayer";
 import type { VersusClip } from "../Versus/types";
+import type { IconName } from "../Versus/icons";
 
 export type EducatifSlideDurations = {
   hook: number;
@@ -27,6 +28,16 @@ export type EducatifVoiceovers = Partial<{
   conseil2: string;
   conseil3: string;
   cta: string;
+}>;
+
+// Contextual icon tag per segment — see VersusIcons in ../Versus/types.ts
+// for the full contract.
+export type EducatifIcons = Partial<{
+  hook: IconName;
+  conseil1: IconName;
+  conseil2: IconName;
+  conseil3: IconName;
+  cta: IconName;
 }>;
 
 export type EducatifProps = {
@@ -63,6 +74,8 @@ export type EducatifProps = {
   // key missing here (probe failed, or no voiceover for that slide) falls
   // back to that slide's default duration.
   voiceoverDurations?: Partial<Record<keyof EducatifVoiceovers, number>>;
+  // Contextual icon tags per segment — see EducatifIcons above.
+  icons?: EducatifIcons;
   // Internal: background music, picked and probed by
   // server/render-server.js from public/audio/music/. Not meant to be
   // set by callers (Make) — absent when that folder is empty/missing.

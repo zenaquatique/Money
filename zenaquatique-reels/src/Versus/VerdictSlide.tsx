@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import type { IconName } from "./icons";
 import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
@@ -15,6 +16,10 @@ export const VerdictSlide: React.FC<{
   // ctaVoiceoverOffsetInFrames), so cta's words don't start popping in
   // until verdict's narration has actually finished.
   ctaOffsetInFrames?: number;
+  // Icon badge for the verdict segment — SlideFrame only supports one
+  // badge per slide, so the cta segment (already visually distinct as its
+  // own pill) doesn't get its own icon.
+  icon?: IconName;
 }> = ({
   brand,
   text,
@@ -22,6 +27,7 @@ export const VerdictSlide: React.FC<{
   durationInFrames,
   hasVideoBackground,
   ctaOffsetInFrames = 0,
+  icon,
 }) => {
   const textShadow = hasVideoBackground
     ? "0 2px 16px rgba(0,0,0,0.6)"
@@ -34,6 +40,7 @@ export const VerdictSlide: React.FC<{
       background={hasVideoBackground ? "transparent" : colors.brand}
       scrim={hasVideoBackground ? colors.scrimBrand : undefined}
       durationInFrames={durationInFrames}
+      icon={icon}
     >
       <div
         style={{

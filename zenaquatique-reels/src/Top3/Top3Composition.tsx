@@ -25,6 +25,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
   durationsInSeconds,
   renderSeed,
   voiceovers,
+  icons,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -51,6 +52,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           text={hook}
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.hook}
         />
         <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
@@ -64,6 +66,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           text={produit1.text}
           durationInFrames={produit1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.produit1}
         />
         <SlideVoiceover url={voiceovers?.produit1} />
       </Sequence>
@@ -77,6 +80,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           text={produit2.text}
           durationInFrames={produit2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.produit2}
         />
         <SlideVoiceover url={voiceovers?.produit2} />
       </Sequence>
@@ -90,6 +94,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           text={produit3.text}
           durationInFrames={produit3Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.produit3}
         />
         <SlideVoiceover url={voiceovers?.produit3} />
       </Sequence>
@@ -98,6 +103,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           text={benefices}
           durationInFrames={benefSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.benefices}
         />
         <SlideVoiceover url={voiceovers?.benefices} />
       </Sequence>
@@ -107,6 +113,7 @@ export const Top3Composition: React.FC<Top3Props> = ({
           cta={cta}
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.cta}
         />
         <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>

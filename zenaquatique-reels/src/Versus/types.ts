@@ -1,4 +1,5 @@
 import type { MusicTrack } from "./AudioLayer";
+import type { IconName } from "./icons";
 
 export type VersusSlideDurations = {
   hook: number;
@@ -47,6 +48,19 @@ export type VersusVoiceovers = Partial<{
   cta: string;
 }>;
 
+// Contextual icon tag per segment, provided by Make (Claude tags each
+// segment with one of the ICONS keys from ./icons when it generates the
+// script — see README's "Icônes contextuelles"). Optional as a whole and
+// per-key, same contract as voiceovers: a render works identically with
+// or without it, a segment without a tag just shows no icon badge.
+export type VersusIcons = Partial<{
+  hook: IconName;
+  optionA: IconName;
+  optionB: IconName;
+  verdict: IconName;
+  cta: IconName;
+}>;
+
 export type VersusProps = {
   brand: string;
   hook: string;
@@ -90,6 +104,8 @@ export type VersusProps = {
   // key missing here (probe failed, or no voiceover for that slide) falls
   // back to that slide's default duration.
   voiceoverDurations?: Partial<Record<keyof VersusVoiceovers, number>>;
+  // Contextual icon tags per segment — see VersusIcons above.
+  icons?: VersusIcons;
   // Internal: background music, picked and probed by
   // server/render-server.js from public/audio/music/. Not meant to be
   // set by callers (Make) — absent when that folder is empty/missing.

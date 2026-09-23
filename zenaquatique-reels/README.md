@@ -337,6 +337,42 @@ le départ, seule leur opacité/échelle change ; la ligne (ou les lignes)
 reste donc centrée comme avant, et les mots apparaissent progressivement
 à leur emplacement final plutôt que de faire bouger le texte déjà affiché.
 
+## Icônes contextuelles (`icons`)
+
+Chaque slide peut afficher une petite icône en médaillon (coin haut-droit,
+synchronisée avec l'apparition/disparition de la slide) illustrant l'idée
+du segment — ex: `check` pour l'option B d'un Versus, `warning` pour un
+conseil qui met en garde. `src/Versus/icons.tsx` définit un jeu de 13
+icônes SVG inline (aucune dépendance externe) : `check`, `cross`,
+`trending_up`, `trending_down`, `clock`, `warning`, `star`, `heart`,
+`lightbulb`, `arrow_right`, `euro`, `leaf`, `drop`.
+
+**Comment ça arrive** : un nouveau champ `icons` (optionnel, comme
+`voiceovers`) dans le payload JSON envoyé à `POST /render` — un objet qui
+associe à chaque segment une des 13 valeurs ci-dessus (mêmes clés que
+`voiceovers`, ex: `{"hook": "trending_up", "optionA": "cross", "optionB":
+"check", "verdict": "leaf", "cta": "arrow_right"}` pour Versus). Absent ou
+avec une clé manquante → cette slide n'affiche simplement pas d'icône, pas
+d'erreur. Le champ transite tel quel de `render-server.js` (`inputProps`)
+jusqu'à chaque composition, qui le déconstruit vers la bonne slide (voir
+`icons?.hook`, `icons?.optionA`, etc. dans chaque `*Composition.tsx`).
+
+**Où le générer côté Make** : c'est Claude (le module qui génère le script
+— `hook`/`optionA`/etc.) qui doit taguer chaque segment avec une icône de
+la liste fermée ci-dessus dans son propre JSON de réponse, puis le module
+HTTP qui construit le corps envoyé à `render.zen-aquatique.fr/render`
+doit relayer cet objet `icons`. Ce n'est pas encore fait côté Make à ce
+jour — le scénario doit être mis à jour (voir historique de conversation
+pour les instructions exactes données au moment de cette fonctionnalité).
+
+**Personnalisation visuelle** : `SlideFrame` accepte `icon`/`iconColor` —
+la couleur par défaut est `colors.aqua`, mais `OptionSlide` passe déjà sa
+propre couleur d'accent (`softWhite` pour l'option A, `aqua` pour la B)
+pour rester lisible sur son propre fond. Une seule icône par slide (pas de
+minuterie interne séparée) — pour `VerdictSlide`, qui a deux textes voix
+off distincts (`verdict` et `cta`), seul `verdict` peut avoir une icône,
+le CTA restant un badge visuellement distinct sans icône dédiée.
+
 ## Qualité de rendu (netteté)
 
 `server/render-server.js` appelle `renderMedia` via l'API Node.js de

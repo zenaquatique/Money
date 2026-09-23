@@ -22,6 +22,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
   durationsInSeconds,
   renderSeed,
   voiceovers,
+  icons,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -48,6 +49,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           text={hook}
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.hook}
         />
         <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
@@ -59,6 +61,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           text={message1}
           durationInFrames={message1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.message1}
         />
         <SlideVoiceover url={voiceovers?.message1} />
       </Sequence>
@@ -70,6 +73,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           text={message2}
           durationInFrames={message2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.message2}
         />
         <SlideVoiceover url={voiceovers?.message2} />
       </Sequence>
@@ -79,6 +83,7 @@ export const ConceptComposition: React.FC<ConceptProps> = ({
           cta={cta}
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.cta}
         />
         <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>

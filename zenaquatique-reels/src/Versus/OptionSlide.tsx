@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import type { IconName } from "./icons";
 import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
@@ -9,7 +10,8 @@ export const OptionSlide: React.FC<{
   text: string;
   durationInFrames: number;
   hasVideoBackground: boolean;
-}> = ({ variant, label, text, durationInFrames, hasVideoBackground }) => {
+  icon?: IconName;
+}> = ({ variant, label, text, durationInFrames, hasVideoBackground, icon }) => {
   const background = variant === "A" ? colors.neutral : colors.brand;
   const scrim = variant === "A" ? colors.scrimNeutral : colors.scrimBrand;
   const accent = variant === "A" ? colors.softWhite : colors.aqua;
@@ -22,6 +24,8 @@ export const OptionSlide: React.FC<{
       background={hasVideoBackground ? "transparent" : background}
       scrim={hasVideoBackground ? scrim : undefined}
       durationInFrames={durationInFrames}
+      icon={icon}
+      iconColor={accent}
     >
       <div
         style={{

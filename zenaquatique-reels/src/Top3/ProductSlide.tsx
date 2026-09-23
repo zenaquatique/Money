@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import type { IconName } from "../Versus/icons";
 import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
@@ -9,7 +10,8 @@ export const ProductSlide: React.FC<{
   text: string;
   durationInFrames: number;
   hasVideoBackground: boolean;
-}> = ({ rank, label, text, durationInFrames, hasVideoBackground }) => {
+  icon?: IconName;
+}> = ({ rank, label, text, durationInFrames, hasVideoBackground, icon }) => {
   const textShadow = hasVideoBackground
     ? "0 2px 16px rgba(0,0,0,0.6)"
     : undefined;
@@ -19,6 +21,7 @@ export const ProductSlide: React.FC<{
       background={hasVideoBackground ? "transparent" : colors.brand}
       scrim={hasVideoBackground ? colors.scrimBrand : undefined}
       durationInFrames={durationInFrames}
+      icon={icon}
     >
       <div
         style={{

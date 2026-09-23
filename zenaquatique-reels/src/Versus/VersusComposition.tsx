@@ -29,6 +29,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
   renderSeed,
   voiceovers,
   voiceoverDurations,
+  icons,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -63,6 +64,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           text={hook}
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.hook}
         />
         <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
@@ -76,6 +78,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           text={optionA.text}
           durationInFrames={optionASlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.optionA}
         />
         <SlideVoiceover url={voiceovers?.optionA} />
       </Sequence>
@@ -89,6 +92,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           text={optionB.text}
           durationInFrames={optionBSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.optionB}
         />
         <SlideVoiceover url={voiceovers?.optionB} />
       </Sequence>
@@ -103,6 +107,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           durationInFrames={verdictSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
           ctaOffsetInFrames={ctaVoiceoverOffsetInFrames}
+          icon={icons?.verdict}
         />
         <SlideVoiceover url={voiceovers?.verdict} />
         {voiceovers?.cta && (

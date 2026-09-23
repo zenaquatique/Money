@@ -23,6 +23,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
   durationsInSeconds,
   renderSeed,
   voiceovers,
+  icons,
   musicTrack,
 }) => {
   const { fps } = useVideoConfig();
@@ -49,6 +50,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           text={hook}
           durationInFrames={hookSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.hook}
         />
         <SlideVoiceover url={voiceovers?.hook} />
       </Sequence>
@@ -61,6 +63,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           text={conseil1}
           durationInFrames={conseil1Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.conseil1}
         />
         <SlideVoiceover url={voiceovers?.conseil1} />
       </Sequence>
@@ -73,6 +76,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           text={conseil2}
           durationInFrames={conseil2Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.conseil2}
         />
         <SlideVoiceover url={voiceovers?.conseil2} />
       </Sequence>
@@ -85,6 +89,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           text={conseil3}
           durationInFrames={conseil3Slide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.conseil3}
         />
         <SlideVoiceover url={voiceovers?.conseil3} />
       </Sequence>
@@ -94,6 +99,7 @@ export const EducatifComposition: React.FC<EducatifProps> = ({
           cta={cta}
           durationInFrames={ctaSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          icon={icons?.cta}
         />
         <SlideVoiceover url={voiceovers?.cta} />
       </Sequence>

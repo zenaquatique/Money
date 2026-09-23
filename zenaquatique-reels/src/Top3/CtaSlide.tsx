@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import type { IconName } from "../Versus/icons";
 import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
@@ -8,7 +9,8 @@ export const CtaSlide: React.FC<{
   cta: string;
   durationInFrames: number;
   hasVideoBackground: boolean;
-}> = ({ brand, cta, durationInFrames, hasVideoBackground }) => {
+  icon?: IconName;
+}> = ({ brand, cta, durationInFrames, hasVideoBackground, icon }) => {
   const textShadow = hasVideoBackground
     ? "0 2px 16px rgba(0,0,0,0.6)"
     : undefined;
@@ -18,6 +20,7 @@ export const CtaSlide: React.FC<{
       background={hasVideoBackground ? "transparent" : colors.brand}
       scrim={hasVideoBackground ? colors.scrimBrand : undefined}
       durationInFrames={durationInFrames}
+      icon={icon}
     >
       <KaraokeText
         text={cta}
