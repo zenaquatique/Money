@@ -62,13 +62,30 @@ const clampRotateDeg = (deg: number): number => Math.min(8, Math.max(-8, deg));
 // overridden falls back to an automatically-picked preset (deterministic
 // per shot from `seed`, so every render is already varied with zero
 // Make/Claude changes required).
+//
+// `clip` ultimately comes from whatever JSON Make's HTTP module sends —
+// server/render-server.js only checks `clip.src`, so `effect`/`speed`/
+// `rotateDeg` reach here exactly as an LLM wrote them: a typo'd effect
+// name, a stringified number, or a field missing entirely are all
+// expected inputs, not edge cases, so every one of them falls back to the
+// auto-picked preset rather than producing a broken/undefined shot.
+const isShotEffect = (value: unknown): value is ShotEffect =>
+  typeof value === "string" && (SHOT_EFFECTS as string[]).includes(value);
+
 const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
   const autoEffect =
     SHOT_EFFECTS[Math.floor(random(`${seed}:style`) * SHOT_EFFECTS.length)];
-  const base = SHOT_MOTION[clip.effect ?? autoEffect];
-  const rotateFrom = clip.rotateDeg !== undefined ? 0 : base.rotateFrom;
-  const rotateTo =
-    clip.rotateDeg !== undefined ? clampRotateDeg(clip.rotateDeg) : base.rotateTo;
+  const base = SHOT_MOTION[isShotEffect(clip.effect) ? clip.effect : autoEffect];
+
+  const hasRotateOverride =
+    typeof clip.rotateDeg === "number" && Number.isFinite(clip.rotateDeg);
+  const rotateFrom = hasRotateOverride ? 0 : base.rotateFrom;
+  const rotateTo = hasRotateOverride
+    ? clampRotateDeg(clip.rotateDeg as number)
+    : base.rotateTo;
+
+  const hasSpeedOverride =
+    typeof clip.speed === "number" && Number.isFinite(clip.speed);
 
   // A rotated frame needs extra overscale to avoid exposing an empty
   // corner — each preset already overscales enough for its own rotation,
@@ -83,7 +100,7 @@ const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
     scaleTo: Math.max(base.scaleTo, minScaleForRotation),
     rotateFrom,
     rotateTo,
-    speed: clip.speed !== undefined ? clampSpeed(clip.speed) : base.speed,
+    speed: hasSpeedOverride ? clampSpeed(clip.speed as number) : base.speed,
   };
 };
 
