@@ -102,6 +102,7 @@ export const VersusComposition: React.FC<VersusProps> = ({
           cta={cta}
           durationInFrames={verdictSlide.durationInFrames}
           hasVideoBackground={hasVideoBackground}
+          ctaOffsetInFrames={ctaVoiceoverOffsetInFrames}
         />
         <SlideVoiceover url={voiceovers?.verdict} />
         {voiceovers?.cta && (

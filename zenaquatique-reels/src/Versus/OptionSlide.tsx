@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
 export const OptionSlide: React.FC<{
@@ -49,7 +50,9 @@ export const OptionSlide: React.FC<{
           Option {variant} — {label}
         </span>
       </div>
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.white,
           fontSize: 56,
@@ -58,9 +61,7 @@ export const OptionSlide: React.FC<{
           textAlign: "center",
           textShadow,
         }}
-      >
-        {text}
-      </div>
+      />
     </SlideFrame>
   );
 };

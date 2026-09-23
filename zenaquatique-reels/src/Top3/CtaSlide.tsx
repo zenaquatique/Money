@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const CtaSlide: React.FC<{
@@ -18,7 +19,9 @@ export const CtaSlide: React.FC<{
       scrim={hasVideoBackground ? colors.scrimBrand : undefined}
       durationInFrames={durationInFrames}
     >
-      <div
+      <KaraokeText
+        text={cta}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.deepWater,
           background: colors.aqua,
@@ -28,9 +31,7 @@ export const CtaSlide: React.FC<{
           fontWeight: 700,
           textAlign: "center",
         }}
-      >
-        {cta}
-      </div>
+      />
       <div
         style={{
           color: colors.softWhite,

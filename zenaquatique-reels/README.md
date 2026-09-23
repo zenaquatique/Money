@@ -295,6 +295,48 @@ ORB, celle-ci ne visant que les requêtes cross-origin). Si ce sondage
 échoue, le morceau choisi joue une fois sans boucler plutôt que de risquer
 un point de boucle incorrect — jamais d'erreur de rendu dans tous les cas.
 
+## Sous-titres animés mot par mot (`KaraokeText`)
+
+Le texte de chaque slide (Hook, Option A/B, Verdict, CTA, Top3/Educatif/
+Concept...) s'affiche désormais mot par mot façon karaoké, chaque mot
+apparaissant (fondu + léger effet de zoom) au moment où il est censé être
+prononcé, plutôt que le bloc entier d'un coup. `src/Versus/KaraokeText.tsx`
+est le composant partagé (réutilisé par les 4 formats via `../Versus/...`)
+qui fait ce travail — il remplace les anciens `<div>{text}</div>` dans les
+7 composants de slide (`HookSlide`, `OptionSlide`, `VerdictSlide`,
+`ProductSlide`, `BenefitsSlide`, `CtaSlide`, `TipSlide`, `MessageSlide`).
+
+**Timing** : chaque mot se voit attribuer une fenêtre de
+`durationInFrames ÷ nombre de mots` — une approximation (durée totale du
+texte divisée équitablement), pas les vrais timestamps par mot de la voix
+off. ElevenLabs propose un endpoint dédié (`with-timestamps`) qui renvoie
+l'alignement mot par mot réel, mais l'utiliser demanderait de modifier les
+~20 appels HTTP ElevenLabs du scénario Make (réponse JSON avec alignement
+au lieu de l'audio brut actuel) et de faire transiter ces timings jusqu'à
+Remotion via `render-server.js` — un chantier plus large, pas fait pour
+l'instant. Le composant est conçu pour absorber ce changement plus tard
+sans changer son interface publique (`text`/`durationInFrames`/`startFrame`
+resteraient, seules les valeurs passées viendraient d'un vrai alignement).
+
+**Cas particulier — `VerdictSlide`** : c'est la seule slide avec deux
+textes voix-off distincts dans la même séquence (`verdict` puis `cta`, qui
+s'enchaînent — voir `ctaVoiceoverOffsetInFrames` dans
+`VersusComposition.tsx`). `VerdictSlide` reçoit ce décalage via sa prop
+`ctaOffsetInFrames` et le transmet à la seconde `KaraokeText` via son prop
+`startFrame`, pour que les mots du CTA ne commencent à apparaître qu'une
+fois la narration du verdict terminée — plutôt que les deux textes qui
+révèlent leurs mots en parallèle. Sans voix off `cta` distincte (le pill
+CTA est alors juste un texte statique accompagnant le verdict), les deux
+révèlent leurs mots ensemble sur toute la durée de la slide, comme avant.
+
+**Mise en page** : `KaraokeText` découpe le texte en mots
+(`text.split(/\s+/)`) et les rend dans un conteneur flex
+(`flexWrap: "wrap", justifyContent: "center"`) — tous les mots (y compris
+ceux pas encore "prononcés") occupent leur place dans la mise en page dès
+le départ, seule leur opacité/échelle change ; la ligne (ou les lignes)
+reste donc centrée comme avant, et les mots apparaissent progressivement
+à leur emplacement final plutôt que de faire bouger le texte déjà affiché.
+
 ## Qualité de rendu (netteté)
 
 `server/render-server.js` appelle `renderMedia` via l'API Node.js de

@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
 export const VerdictSlide: React.FC<{
@@ -8,10 +9,25 @@ export const VerdictSlide: React.FC<{
   cta: string;
   durationInFrames: number;
   hasVideoBackground: boolean;
-}> = ({ brand, text, cta, durationInFrames, hasVideoBackground }) => {
+  // Frame, within this slide, where the cta voiceover starts — 0 when
+  // there's no distinct cta voiceover (verdict and cta reveal together),
+  // otherwise where the verdict voiceover ends (see VersusComposition's
+  // ctaVoiceoverOffsetInFrames), so cta's words don't start popping in
+  // until verdict's narration has actually finished.
+  ctaOffsetInFrames?: number;
+}> = ({
+  brand,
+  text,
+  cta,
+  durationInFrames,
+  hasVideoBackground,
+  ctaOffsetInFrames = 0,
+}) => {
   const textShadow = hasVideoBackground
     ? "0 2px 16px rgba(0,0,0,0.6)"
     : undefined;
+  const verdictDurationInFrames =
+    ctaOffsetInFrames > 0 ? ctaOffsetInFrames : durationInFrames;
 
   return (
     <SlideFrame
@@ -32,7 +48,9 @@ export const VerdictSlide: React.FC<{
       >
         Verdict
       </div>
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={verdictDurationInFrames}
         style={{
           color: colors.white,
           fontSize: 60,
@@ -42,10 +60,11 @@ export const VerdictSlide: React.FC<{
           marginBottom: 56,
           textShadow,
         }}
-      >
-        {text}
-      </div>
-      <div
+      />
+      <KaraokeText
+        text={cta}
+        durationInFrames={durationInFrames - ctaOffsetInFrames}
+        startFrame={ctaOffsetInFrames}
         style={{
           color: colors.deepWater,
           background: colors.aqua,
@@ -55,9 +74,7 @@ export const VerdictSlide: React.FC<{
           fontWeight: 700,
           textAlign: "center",
         }}
-      >
-        {cta}
-      </div>
+      />
       <div
         style={{
           color: colors.softWhite,

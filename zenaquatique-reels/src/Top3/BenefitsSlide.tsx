@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const BenefitsSlide: React.FC<{
@@ -30,7 +31,9 @@ export const BenefitsSlide: React.FC<{
       >
         Bénéfices
       </div>
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.white,
           fontSize: 60,
@@ -39,9 +42,7 @@ export const BenefitsSlide: React.FC<{
           textAlign: "center",
           textShadow,
         }}
-      >
-        {text}
-      </div>
+      />
     </SlideFrame>
   );
 };

@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const MessageSlide: React.FC<{
@@ -17,7 +18,9 @@ export const MessageSlide: React.FC<{
       scrim={hasVideoBackground ? colors.scrimBrand : undefined}
       durationInFrames={durationInFrames}
     >
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.white,
           fontSize: 64,
@@ -26,9 +29,7 @@ export const MessageSlide: React.FC<{
           textAlign: "center",
           textShadow,
         }}
-      >
-        {text}
-      </div>
+      />
     </SlideFrame>
   );
 };

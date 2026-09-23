@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "./colors";
+import { KaraokeText } from "./KaraokeText";
 import { SlideFrame } from "./SlideFrame";
 
 export const HookSlide: React.FC<{
@@ -31,7 +32,9 @@ export const HookSlide: React.FC<{
       >
         {brand}
       </div>
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.white,
           fontSize: 76,
@@ -40,9 +43,7 @@ export const HookSlide: React.FC<{
           textAlign: "center",
           textShadow,
         }}
-      >
-        {text}
-      </div>
+      />
     </SlideFrame>
   );
 };

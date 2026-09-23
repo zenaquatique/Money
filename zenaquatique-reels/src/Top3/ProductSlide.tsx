@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "../Versus/colors";
+import { KaraokeText } from "../Versus/KaraokeText";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const ProductSlide: React.FC<{
@@ -46,7 +47,9 @@ export const ProductSlide: React.FC<{
           #{rank} — {label}
         </span>
       </div>
-      <div
+      <KaraokeText
+        text={text}
+        durationInFrames={durationInFrames}
         style={{
           color: colors.white,
           fontSize: 56,
@@ -55,9 +58,7 @@ export const ProductSlide: React.FC<{
           textAlign: "center",
           textShadow,
         }}
-      >
-        {text}
-      </div>
+      />
     </SlideFrame>
   );
 };
