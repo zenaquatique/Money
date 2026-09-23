@@ -373,6 +373,76 @@ minuterie interne séparée) — pour `VerdictSlide`, qui a deux textes voix
 off distincts (`verdict` et `cta`), seul `verdict` peut avoir une icône,
 le CTA restant un badge visuellement distinct sans icône dédiée.
 
+## Overlays de preuve chiffrée (`NumberOverlay`)
+
+Chaque prix ou quantité mentionné dans le texte d'une slide (`"0,99€"`,
+`"5€"`, `"30%"`, `"48h"`...) s'affiche en plus, en gros, dans un badge
+animé qui apparaît exactement au moment où ce mot est "prononcé" par le
+sous-titrage karaoké — pour que le chiffre ne repose pas que sur la voix
+off (l'un des 4 points de l'audit qualité IA de septembre 2026 : "overlays
+de preuve chiffrée"). `src/Versus/NumberOverlay.tsx` est le composant
+partagé, ajouté en frère de chaque `<KaraokeText>` dans les 8 composants
+de slide — même `text`/`durationInFrames`/`startFrame` que la
+`KaraokeText` voisine, pour rester synchronisé sans timing séparé à
+maintenir (les deux composants partagent `splitWords`, exporté par
+`KaraokeText.tsx`).
+
+**Détection** : tout mot contenant au moins un chiffre est traité comme
+une "preuve chiffrée" — pas de liste d'unités à maintenir. Un mot suivant
+qui n'est qu'un symbole (`€`, `%`) est fusionné dans le même badge (couvre
+le cas rare où Claude écrit `"0,99 €"` avec un espace plutôt que `"0,99€"`
+collé). Rien à changer côté Make : ça lit le texte déjà généré
+(`hook`/`optionA.text`/etc.), aucun nouveau champ JSON. Un texte sans
+aucun chiffre n'affiche simplement aucun badge.
+
+**Timing** : badge qui apparaît (fondu + léger effet de zoom, ~0,25s),
+reste visible ~1,4s le temps d'être lu, puis s'efface — indépendant de la
+durée du mot karaoké lui-même, pour laisser le temps de lire même un
+chiffre bref comme `"5€"`.
+
+## Rythme visuel dynamique et transitions sonores (`BackgroundVideoLayer`)
+
+Avant cette fonctionnalité, un rush pouvait couvrir toute la durée d'une
+slide sans coupe ni mouvement dès lors qu'il était assez long — l'effet
+"diaporama figé" relevé par l'audit qualité IA. `BackgroundVideoLayer.tsx`
+gère maintenant ça en deux volets :
+
+**Coupes automatiques (jump cuts)** : aucun plan ne reste statique plus de
+`MAX_SHOT_DURATION_IN_SECONDS` (2,5s) d'affilée. Toute allocation de clip
+(intro ou tail) plus longue que ça est découpée en plusieurs plans
+consécutifs (`splitIntoShots`), chacun rejoué depuis un point de départ
+aléatoire différent dans le **même** fichier source (`trimBefore` recalculé
+par plan, avec un suffixe de seed distinct) — un vrai jump cut en réutilisant
+le stock de rushes existant, sans qu'aucune nouvelle vidéo ne soit
+nécessaire. Un plan issu d'un rush trop court pour être re-trimmé retombe
+sur le comportement `<Loop>` déjà existant.
+
+**Mouvement de caméra (Ken Burns)** : chaque plan reçoit en plus un léger
+zoom continu sur sa propre durée (avant→arrière ou arrière→avant, alterné
+par plan via `random(seed)`) — même un plan filmé statique à la prise de
+vue lit comme un mouvement de caméra plutôt qu'une image figée.
+
+**Transitions sonores** : un bref "whoosh" (0,4-0,6s) joue à chaque coupe
+(sauf à la toute première frame de la vidéo). Les 3 fichiers vivent dans
+`public/audio/sfx/` (`whoosh-1.mp3`, `whoosh-2.mp3`, `whoosh-3.mp3`),
+listés en dur dans `src/Versus/sfx.ts` — contrairement à la musique de
+fond (`public/audio/music/`), pas besoin de sondage côté serveur puisque
+le jeu de fichiers est fixe et fait partie du dépôt. Ces sons ont été
+**synthétisés par script** (bruit blanc filtré passe-bande, fréquence
+centrale balayée, enveloppe douce — voir l'historique de conversation pour
+le détail) plutôt que téléchargés depuis une bibliothèque de sons libres
+de droits externe, l'accès réseau sortant du sandbox de développement
+bloquant les hôtes CC0 usuels (freesound.org, mixkit.co, pixabay,
+opengameart.org, archive.org) — évite au passage toute question de licence
+puisqu'ils sont générés, pas empruntés. Le fichier `whoosh` choisi à
+chaque coupe est random mais déterministe (même `seed` → même choix).
+
+Ces trois changements se combinent : plus une slide compte de coupes, plus
+il y a de whooshs et de zooms distincts — un texte long avec plusieurs
+prix (donc plusieurs badges `NumberOverlay`) tombe naturellement sur une
+slide au montage plus dynamique, sans lien direct entre les deux mais un
+effet cohérent à l'écran.
+
 ## Qualité de rendu (netteté)
 
 `server/render-server.js` appelle `renderMedia` via l'API Node.js de

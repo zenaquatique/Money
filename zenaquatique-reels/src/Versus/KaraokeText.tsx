@@ -6,6 +6,13 @@ import { interpolate, useCurrentFrame } from "remotion";
 // slide's own entrance animation (see SlideFrame).
 const POP_IN_FRAMES = 6;
 
+// Shared with NumberOverlay.tsx so a price/quantity badge pops in on
+// exactly the same frame as the word it echoes — both split `text` the
+// same way and index into the same array, so the two stay in lockstep
+// with no separate timing computation to keep in sync by hand.
+export const splitWords = (text: string): string[] =>
+  text.split(/\s+/).filter(Boolean);
+
 type KaraokeTextProps = {
   text: string;
   // Total budget, in frames, across which text's words are spread evenly
@@ -32,7 +39,7 @@ export const KaraokeText: React.FC<KaraokeTextProps> = ({
   style,
 }) => {
   const frame = useCurrentFrame();
-  const words = text.split(/\s+/).filter(Boolean);
+  const words = splitWords(text);
   const framesPerWord = words.length > 0 ? durationInFrames / words.length : 0;
 
   return (

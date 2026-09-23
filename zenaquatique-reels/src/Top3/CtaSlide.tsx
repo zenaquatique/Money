@@ -2,6 +2,7 @@ import React from "react";
 import { colors } from "../Versus/colors";
 import type { IconName } from "../Versus/icons";
 import { KaraokeText } from "../Versus/KaraokeText";
+import { NumberOverlay } from "../Versus/NumberOverlay";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const CtaSlide: React.FC<{
@@ -35,6 +36,7 @@ export const CtaSlide: React.FC<{
           textAlign: "center",
         }}
       />
+      <NumberOverlay text={cta} durationInFrames={durationInFrames} />
       <div
         style={{
           color: colors.softWhite,

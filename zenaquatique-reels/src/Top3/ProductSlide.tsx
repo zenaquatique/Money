@@ -2,6 +2,7 @@ import React from "react";
 import { colors } from "../Versus/colors";
 import type { IconName } from "../Versus/icons";
 import { KaraokeText } from "../Versus/KaraokeText";
+import { NumberOverlay } from "../Versus/NumberOverlay";
 import { SlideFrame } from "../Versus/SlideFrame";
 
 export const ProductSlide: React.FC<{
@@ -62,6 +63,7 @@ export const ProductSlide: React.FC<{
           textShadow,
         }}
       />
+      <NumberOverlay text={text} durationInFrames={durationInFrames} />
     </SlideFrame>
   );
 };

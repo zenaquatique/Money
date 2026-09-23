@@ -2,6 +2,7 @@ import React from "react";
 import { colors } from "./colors";
 import type { IconName } from "./icons";
 import { KaraokeText } from "./KaraokeText";
+import { NumberOverlay } from "./NumberOverlay";
 import { SlideFrame } from "./SlideFrame";
 
 export const VerdictSlide: React.FC<{
@@ -81,6 +82,12 @@ export const VerdictSlide: React.FC<{
           fontWeight: 700,
           textAlign: "center",
         }}
+      />
+      <NumberOverlay text={text} durationInFrames={verdictDurationInFrames} />
+      <NumberOverlay
+        text={cta}
+        durationInFrames={durationInFrames - ctaOffsetInFrames}
+        startFrame={ctaOffsetInFrames}
       />
       <div
         style={{

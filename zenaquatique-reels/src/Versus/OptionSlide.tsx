@@ -2,6 +2,7 @@ import React from "react";
 import { colors } from "./colors";
 import type { IconName } from "./icons";
 import { KaraokeText } from "./KaraokeText";
+import { NumberOverlay } from "./NumberOverlay";
 import { SlideFrame } from "./SlideFrame";
 
 export const OptionSlide: React.FC<{
@@ -66,6 +67,7 @@ export const OptionSlide: React.FC<{
           textShadow,
         }}
       />
+      <NumberOverlay text={text} durationInFrames={durationInFrames} />
     </SlideFrame>
   );
 };
