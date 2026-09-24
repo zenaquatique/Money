@@ -507,18 +507,22 @@ zoom supplémentaire (`minScaleForRotation` dans `resolveShotMotion`) pour
 ne jamais exposer un coin vide ; vitesse et angle sont bornés (0,6-1,8x,
 ±8°) pour qu'une valeur aberrante ne puisse jamais casser un rendu.
 
-**Transitions sonores (v2)** : un bref whoosh joue à chaque coupe de plan
+**Transitions sonores (v3)** : un bref whoosh joue à chaque coupe de plan
 (`CutSound` dans `BackgroundVideoLayer.tsx`, skip à la toute première
 frame de la vidéo), et un léger pop à chaque nouveau groupe de mots des
 sous-titres (`ChunkPopSounds` dans `KaraokeText.tsx`). Une v1 de ce whoosh
 avait été retirée après s'être révélée trop forte/dure en conditions
-réelles — v2 corrige ça sur trois points : synthèse plus douce (mélange
-bruit filtré + une fine sous-couche tonale, lissage passe-bas au lieu du
-bruit brut, pic normalisé à 0,5 au lieu de 0,85), durée plus courte
-(0,35-0,45s), et surtout un volume de lecture nettement plus bas
-(`SFX_VOLUME = 0.22` pour le whoosh, `POP_SFX_VOLUME = 0.16` pour le pop —
-contre 0,45 en v1). Fichiers synthétisés par script (toujours aucun accès
-aux bibliothèques CC0 depuis ce sandbox — voir l'historique de
+réelles ; v2 avait déjà adouci la synthèse (mélange bruit filtré + fine
+sous-couche tonale, lissage passe-bas, pic normalisé à 0,5) et baissé le
+volume (`SFX_VOLUME = 0.22`), mais restait encore trop long/aigu au
+retour d'écoute réel — v3 ne change que les paramètres de synthèse du
+whoosh (durée et bande de fréquences), pas le code de lecture : durée
+quasi divisée par deux (0,20-0,27s contre 0,35-0,45s en v2) et sweep de
+fréquence porté nettement plus bas (grossièrement 180-1100Hz contre
+2400-2800Hz en v2), pour un son plus court et moins strident. Le pop
+(sous-titres) n'a pas été touché, seul le whoosh (coupes de plan) était
+concerné par ce retour. Fichiers synthétisés par script (toujours aucun
+accès aux bibliothèques CC0 depuis ce sandbox — voir l'historique de
 conversation pour le détail), 3 variantes de whoosh + 2 de pop dans
 `public/audio/sfx/`, listées dans `src/Versus/sfx.ts`
 (`WHOOSH_FILES`/`POP_FILES`) — fichier choisi à chaque déclenchement au
