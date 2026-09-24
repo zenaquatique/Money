@@ -534,17 +534,15 @@ original (sans faststart) n'est jamais servi tel quel, puisqu'il échouerait
 de toute façon à l'upload sur ces plateformes. Le serveur continue de
 tourner normalement, cette erreur n'affecte que la tâche en cours.
 
-## Images clés, transcription et critique visuelle (`preview_frames`, `transcribed_audio`, `visual_critique`)
+## Images clés et transcription (`preview_frames`, `transcribed_audio`)
 
-Une fois le faststart appliqué, trois enrichissements tournent sur le
+Une fois le faststart appliqué, deux enrichissements tournent sur le
 fichier final avant que le job passe à `"done"` (images clés et
-transcription en parallèle, puis critique visuelle une fois les images
-clés disponibles puisqu'elle en dépend) — contrairement à faststart,
-**aucun des trois ne peut faire échouer le rendu** : la vidéo elle-même
-est déjà valide à ce stade, ce sont des compléments, pas des prérequis.
-Une erreur sur l'un des trois est juste loguée (`console.warn`) et laisse
-le champ correspondant vide/absent, sans toucher aux autres ni à la
-vidéo.
+transcription en parallèle) — contrairement à faststart, **aucun des deux
+ne peut faire échouer le rendu** : la vidéo elle-même est déjà valide à ce
+stade, ce sont des compléments, pas des prérequis. Une erreur sur l'un des
+deux est juste loguée (`console.warn`) et laisse le champ correspondant
+vide/absent, sans toucher à l'autre ni à la vidéo.
 
 **Images clés (`extractPreviewFrames`)** — 8 images JPEG extraites à
 intervalles réguliers sur toute la durée de la vidéo (via `ffmpeg -ss ...
@@ -586,90 +584,17 @@ accès réseau sortant vers `huggingface.co` à ce moment-là. Si
 (`transcribed_audio: null`), sans erreur ni impact sur le reste — tu peux
 donc déployer cette fonctionnalité plus tard sans rien casser d'ici là.
 
-**Critique visuelle (`analyzeFrames`)** — 2 des images clés déjà extraites
-ci-dessus (la première et la dernière) sont analysées par
-[moondream2](https://huggingface.co/vikhyatk/moondream2), un petit modèle
-de vision-langage open source, avec un prompt qui demande une description
-et tout défaut visuel évident (flou, cadrage, incohérence). Le prompt est
-volontairement en anglais malgré le reste du projet en français : cette
-révision de moondream2 (`2024-08-26`, un petit modèle assez ancien) est
-entraînée surtout sur des données anglaises et décroche sur un prompt
-français à deux volets (testé sur le VPS : elle se contentait de répéter
-la question au lieu d'y répondre) — le texte généré n'a pas besoin d'être
-en français puisque seul le module Claude côté Make le lit ensuite pour
-produire la critique finale. Limité à 2 images plutôt que plus : chaque
-inférence CPU
-prend plusieurs minutes sur un VPS sans GPU (observé : ~1.5 min/image), et
-`analyzeFrames` a un timeout de sécurité de 10 minutes (`execFile` n'en a
-aucun par défaut) au cas où le sous-processus se bloquerait vraiment (pas
-juste lent). Les réponses
-sont combinées en un seul texte. `server/visual_critique.py` fait le
-travail, appelé comme sous-processus Python — même principe que
-`transcribe.py`.
-
-⚠️ Le paquet PyPI officiel `moondream` ne convient **pas** ici : son
-inférence locale (backend "Photon") requiert explicitement un GPU
-(CUDA ou Apple Silicon) et refuse de démarrer sans — inutilisable sur un
-VPS sans GPU, quelle que soit la variante de `torch` installée. C'est
-pourquoi ce script charge `moondream2` via `transformers`
-(`trust_remote_code=True`), l'ancienne méthode de chargement mais qui,
-elle, tourne bien sur CPU.
-
-**Prérequis (critique visuelle uniquement)** — en plus de ffmpeg (déjà
-requis pour les images clés) :
-
-```console
-pip3 install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
-pip3 install --break-system-packages transformers==4.44.0 accelerate==0.32.1 einops==0.8.0 timm==0.9.12 pillow
-```
-
-**`transformers` doit être pin sur `4.44.0` (pas la dernière version)** —
-`transformers>=5.0.0` a introduit une régression qui casse le chargement
-de nombreux modèles `trust_remote_code=True` basés sur `PhiConfig` (dont
-moondream2) : `AttributeError: 'PhiConfig' object has no attribute
-'pad_token_id'`. `4.44.0` est la version que le
-[HF Space officiel de moondream2](https://huggingface.co/spaces/vikhyatk/moondream2/blob/9098c9e20d57a14981f40647ff75fd8e9d59b0a8/requirements.txt)
-pin pour cette même révision (`2024-08-26`, voir `MODEL_REVISION` dans
-`server/visual_critique.py`) — `accelerate`/`einops`/`timm` sont pin aux
-mêmes versions que ce fichier pour éviter tout conflit croisé (ex.
-`tokenizers`) entre eux.
-
-`torchvision` est requis par le fichier de modèle dynamique de moondream2
-(`trust_remote_code=True` télécharge et exécute du code Python qui
-l'importe) — sans lui, le chargement du modèle échoue avec `ImportError:
-... requires ... torchvision`. `accelerate` est requis par `transformers`
-dès qu'on passe un `device_map` (ce que fait `visual_critique.py` pour
-forcer l'exécution CPU) — sans lui, `from_pretrained` échoue avec
-`ValueError: Using a device_map ... requires accelerate`. Sans l'une ou
-l'autre de ces dépendances (ou avec la mauvaise version de
-`transformers`), `visual_critique` revient `null` à chaque rendu (graceful
-failure, ne casse pas le job, mais le champ ne sert à rien tant que la
-dépendance manque ou est incompatible).
-
-(Le premier `pip3 install torch` sans préciser cet index télécharge par
-défaut la variante CUDA, plusieurs Go pour rien sur un serveur sans GPU —
-d'où l'`--index-url` dédié au CPU.)
-
-Le modèle moondream2 (~3.7 Go) est téléchargé automatiquement au tout
-premier appel (mis en cache ensuite dans `~/.cache/huggingface`, comme
-Whisper ci-dessus) — nécessite un accès réseau sortant vers
-`huggingface.co` à ce moment-là, et l'inférence CPU est lente (plusieurs
-secondes par image).
-
-**Mémoire** — `visual_critique.py` charge le modèle en `bfloat16` plutôt
-que le `float32` par défaut de transformers, pour rester autour de ~3.8 Go
-de RAM au lieu de ~7.6 Go (moondream2 fait ~1.9 milliard de paramètres —
-4 octets/paramètre en float32 vs 2 en bfloat16). Sans ça, le process se
-fait tuer par l'OOM killer du noyau sur un VPS avec peu de RAM et pas de
-swap (observé avec un `Out of memory: Killed process ... python3` dans
-`dmesg` sur un VPS à 7.8 Go de RAM). Si `visual_critique` revient encore
-`null` après avoir vérifié les dépendances ci-dessus, vérifie `dmesg | tail
--50 | grep -i oom` pour écarter un nouvel OOM kill.
-
-Si `transformers`/`torch` ne sont pas installés (ou
-si ce tout premier téléchargement échoue), la critique visuelle est
-simplement absente pour ce rendu (`visual_critique: null`), sans erreur ni
-impact sur le reste.
+**Critique visuelle — retirée.** Une première version faisait analyser 2
+images clés par moondream2 (`server/visual_critique.py`, en local via
+`transformers`, CPU-only) et remontait le résultat dans
+`visual_critique`. Retiré : c'est maintenant Gemini, côté Make (scénario
+"Analyse Performance IA"), qui regarde directement la vidéo rendue —
+un signal bien plus fiable qu'un petit modèle de vision CPU décrivant 2
+frames isolées, pour un coût en moins à chaque rendu (l'inférence CPU
+prenait plusieurs minutes). `visual_critique` reste présent dans la
+réponse JSON mais vaut toujours `null` désormais, pour ne pas casser un
+module Make qui le référencerait encore (`{{...data.visual_critique}}`
+résout simplement à vide).
 
 **Réponse de `GET /render/status/:jobId`** une fois `status: "done"` :
 
@@ -682,13 +607,12 @@ impact sur le reste.
     "https://.../render/frame/abc123/1"
   ],
   "transcribed_audio": "Ton bac vire au vert ? ...",
-  "visual_critique": "Image nette, cadrage centré sur l'aquarium, aucun défaut visible. / ..."
+  "visual_critique": null
 }
 ```
 
 `preview_frames` est toujours un tableau (vide si l'extraction a échoué) ;
-`transcribed_audio` et `visual_critique` sont soit une chaîne, soit
-`null`.
+`transcribed_audio` est soit une chaîne, soit `null`.
 
 ## Déclencher un rendu depuis Make (webhook + tunnel local)
 
@@ -788,9 +712,10 @@ d'attente entre le 2ᵉ et le 3ᵉ) au lieu d'un seul :
   (même en-tête `x-api-key` si configuré)
 - Renvoie `{"status": "processing"}`, `{"status": "done", "videoUrl": "...",
   "preview_frames": [...], "transcribed_audio": "...", "visual_critique":
-  "..."}` (ces trois derniers champs, voir section "Images clés,
-  transcription et critique visuelle" plus haut — utilise-les directement
-  depuis la réponse de ce module, pas besoin d'un 4e appel) ou
+  null}` (les deux champs utiles, voir section "Images clés et
+  transcription" plus haut — utilise-les directement depuis la réponse de
+  ce module, pas besoin d'un 4e appel ; `visual_critique` reste présent
+  mais vaut toujours `null`, voir cette même section) ou
   `{"status": "error", "message": "..."}`
 - Enveloppe ces deux étapes (Sleep + HTTP status) dans un **Repeater** ou une
   branche conditionnelle qui reboucle tant que `status = "processing"`, et
