@@ -36,7 +36,7 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 
 ```json
 "clips": [
-  { "src": "video/rushes/rush_a.mp4" },
+  { "src": "video/rushes/rush_a.mp4", "effect": "zoom_in", "speed": 1.2 },
   { "src": "video/rushes/rush_b.mp4" },
   { "src": "video/rushes/rush_c.mp4" }
 ]
@@ -44,16 +44,24 @@ ordre, Remotion ne choisit ni ne randomise rien lui-même :
 
 - `src` est soit un chemin relatif à `public/` (ex. `video/rushes/xxx.mp4`,
   résolu via `staticFile`), soit une URL `http(s)://` complète.
-- **Tous les clips sauf le(s) dernier(s)** sont des coupes courtes jouées à
-  la suite pendant le Hook (intro dynamique, montage cut).
-- **Le dernier clip** de la liste joue en continu derrière Option A, Option
-  B et Verdict, sur toute cette durée (~17s par défaut). Idéalement assez
-  long pour la couvrir en une fois, mais s'il est plus court, il boucle
-  automatiquement (reprend à 0) plutôt que de geler sur sa dernière image —
-  voir plus bas. Quand Make envoie `clips` explicitement, c'est toujours
-  exactement le dernier clip qui joue ce rôle (comportement inchangé).
-- 2 clips → 1 court + 1 long. 3 clips → 2 courts + 1 long. 1 seul clip → il
-  sert à la fois d'intro et de fond continu.
+- `effect`/`speed`/`rotateDeg` sont optionnels par clip — voir "Rythme
+  visuel dynamique" plus bas pour le détail (styles de caméra disponibles,
+  bornes, comportement par défaut quand ils sont omis).
+- **Chaque clip apparaît à la fois** en bref aperçu pendant le Hook (une
+  fraction de seconde à quelques secondes chacun, tous dans l'ordre donné)
+  **et** sur une portion proportionnelle du reste de la vidéo (Option A,
+  Option B, Verdict) — voir `planClips` dans `src/Versus/clips.ts`. Ce
+  n'est **plus** "tous les clips sauf le dernier en intro, le dernier
+  seul pour tout le reste" (ancien comportement, corrigé — voir plus bas) :
+  avec N clips explicites, chacun des N couvre une vraie portion du corps
+  de la vidéo, pas juste le dernier.
+- Jusqu'à **9 clips** par rendu (`MAX_CLIPS` dans `server/render-server.js`)
+  — au-delà, `POST /render` répond `400`, la requête entière est rejetée
+  (pas de troncature silencieuse). `planClips`/`BackgroundVideoLayer`
+  n'ont eux-mêmes aucune limite câblée en dur ; ce plafond n'est qu'un
+  garde-fou côté validation d'entrée, testé par rendu réel jusqu'à 8 clips
+  simultanés sans problème.
+- 1 seul clip → il sert à la fois d'intro et de fond continu.
 - `"clips": []` (tableau explicitement vide) → repli volontaire sur le fond
   uni de la v1 (texte seul), aucune rotation automatique.
 

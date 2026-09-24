@@ -78,8 +78,13 @@ const COMPOSITIONS = {
 // how many the composition can actually display: the auto-rotation path
 // (pickRushesForTailDuration below) can pick more than this for the tail
 // sequence, since it decides the count itself rather than trusting
-// arbitrary caller input.
-const MAX_CLIPS = 3;
+// arbitrary caller input. BackgroundVideoLayer/planClips place no limit of
+// their own on the number of clips — this is purely a sanity ceiling on
+// what one HTTP request may send, kept independent from RUSH_GROUP_SIZE
+// below (raising this to let Claude pick more clips per script must not
+// also change how many intro-only clips the *unrelated* auto-rotation
+// path picks).
+const MAX_CLIPS = 9;
 // Small readability margin added on top of each voiceover's real duration
 // (same value used before this moved server-side — see
 // src/Versus/voiceoverTimeline.ts for how it's consumed).
@@ -426,8 +431,12 @@ const pickMusicTrack = (seed) => {
 
 // The intro-clip count auto-rotation picks (RUSH_GROUP_SIZE - 1) matches
 // what the old fixed group of RUSH_GROUP_SIZE used to give (2 intro + 1
-// tail) — only the tail count changed, see pickRushesForTailDuration.
-const RUSH_GROUP_SIZE = MAX_CLIPS;
+// tail) — only the tail count changed, see pickRushesForTailDuration. Kept
+// independent from MAX_CLIPS (which now allows more clips than this for
+// the *explicit* Make/Claude path) on purpose — this constant is about how
+// many quick cuts the Hook itself gets during auto-rotation, unrelated to
+// how many clips Claude chooses to name explicitly.
+const RUSH_GROUP_SIZE = 3;
 
 // Classifies one rush filename into a category + species, from the naming
 // convention actually used in public/video/rushes/: the species name in
@@ -927,7 +936,7 @@ app.post("/render", async (req, res) => {
       res.status(400).json({
         error:
           `clips contient ${inputProps.clips.length} fichiers, le maximum est ${MAX_CLIPS}. ` +
-          "Choisis explicitement 2-3 rushes pour ce rendu (le dernier étant le plus long), " +
+          `Choisis explicitement au plus ${MAX_CLIPS} rushes pour ce rendu, ` +
           "ne renvoie pas toute la bibliothèque de rushes disponible.",
       });
       return;
