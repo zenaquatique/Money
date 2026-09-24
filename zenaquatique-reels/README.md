@@ -447,10 +447,18 @@ simple passage éclair pendant le Hook — le dernier clip seul couvrait
 ensuite TOUT le reste de la vidéo (options A/B + verdict, souvent 15+
 secondes). Les jump cuts/zoom s'appliquaient bien dessus, mais comme
 c'était toujours la même source ré-écourtée, Gemini lisait ça comme "un
-plan fixe unique" même une fois les styles de caméra ajoutés. Corrigé :
-sans `tailCount` explicite, tous les clips deviennent à la fois intro (un
-bref aperçu de chacun pendant le Hook) et tail (chacun couvre une part
-proportionnelle du reste de la vidéo).
+plan fixe unique" même une fois les styles de caméra ajoutés. Corrigé une
+première fois en faisant de tous les clips à la fois l'intro et le tail —
+**puis re-corrigé** : ça faisait de chaque clip un aperçu pendant le Hook
+aussi, donc avec 7-9 clips le Hook (~4s fixes) se retrouvait découpé en
+7-9 coupes d'environ une demi-seconde chacune, whoosh à chaque fois — un
+vrai rendu l'a confirmé ("5-6 coupures rapides puis plus rien", "ça casse
+la tête"). Design final : `MAX_INTRO_CLIPS = 2` — seuls les 2 premiers
+clips servent d'aperçu Hook (~2s chacun sur un Hook de 4s, peu importe le
+nombre total de clips), **tous les autres** vont au tail (pas juste le
+dernier, contrairement au tout premier comportement). Vérifié par rendu
+réel avec 8 clips : une seule coupure dans le Hook (~2s), rythme régulier
+d'environ 2-2,5s ensuite sur toute la durée.
 
 **Bug corrigé — l'allocation du "tail" suivait la durée réelle du fichier,
 pas le nombre de clips** : même une fois le bug ci-dessus réglé, l'appel à
