@@ -25,11 +25,11 @@ export const BenefitsSlide: React.FC<{
       <div
         style={{
           color: colors.aqua,
-          fontSize: 30,
+          fontSize: 22,
           fontWeight: 700,
           letterSpacing: 4,
           textTransform: "uppercase",
-          marginBottom: 32,
+          marginBottom: 18,
           textShadow,
         }}
       >
@@ -40,7 +40,7 @@ export const BenefitsSlide: React.FC<{
         durationInFrames={durationInFrames}
         style={{
           color: colors.white,
-          fontSize: 60,
+          fontSize: 36,
           fontWeight: 800,
           lineHeight: 1.25,
           textAlign: "center",

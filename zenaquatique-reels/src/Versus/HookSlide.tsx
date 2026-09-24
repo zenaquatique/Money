@@ -26,11 +26,11 @@ export const HookSlide: React.FC<{
       <div
         style={{
           color: colors.aqua,
-          fontSize: 34,
+          fontSize: 24,
           fontWeight: 700,
           letterSpacing: 4,
           textTransform: "uppercase",
-          marginBottom: 32,
+          marginBottom: 18,
           textShadow,
         }}
       >
@@ -41,9 +41,9 @@ export const HookSlide: React.FC<{
         durationInFrames={durationInFrames}
         style={{
           color: colors.white,
-          fontSize: 76,
+          fontSize: 44,
           fontWeight: 800,
-          lineHeight: 1.15,
+          lineHeight: 1.2,
           textAlign: "center",
           textShadow,
         }}

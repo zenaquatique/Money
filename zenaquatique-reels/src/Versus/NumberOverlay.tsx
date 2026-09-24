@@ -3,6 +3,12 @@ import { interpolate, useCurrentFrame } from "remotion";
 import { colors } from "./colors";
 import { splitWords } from "./KaraokeText";
 
+// Sits well above the caption band at the bottom of the screen (see
+// SlideFrame's bottom-anchored layout and KaraokeText's chunked
+// captions) so the two never overlap — the badge stays roughly in the
+// lower-middle third instead.
+const BOTTOM_OFFSET = "34%";
+
 // How long a badge stays fully visible after popping in, in frames, once
 // the word it echoes has been "spoken" — independent of how long that
 // word's own karaoke slot is, so a short word (e.g. "5€") still gives the
@@ -102,7 +108,7 @@ export const NumberOverlay: React.FC<{
             style={{
               position: "absolute",
               left: "50%",
-              bottom: "16%",
+              bottom: BOTTOM_OFFSET,
               transform: `translateX(-50%) scale(${scale})`,
               opacity,
               background: colors.aqua,

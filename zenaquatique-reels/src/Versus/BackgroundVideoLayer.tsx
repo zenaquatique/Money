@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AbsoluteFill,
+  Audio,
   interpolate,
   Loop,
   OffthreadVideo,
@@ -10,6 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { WHOOSH_FILES } from "./sfx";
 import type { ShotEffect, VersusClip } from "./types";
 
 const resolveClipSrc = (src: string): string =>
@@ -123,6 +125,14 @@ const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
 // each re-trimmed to a different random point in the same source clip —
 // a jump cut using the existing rush library, no new footage needed.
 const MAX_SHOT_DURATION_IN_SECONDS = 2.5;
+
+// A short whoosh plays at every cut (see CutSound) — this is how long its
+// own <Sequence> stays mounted; the actual mp3 is shorter than this and
+// simply finishes playing on its own. Kept quiet (well under the
+// voiceover/music volumes) after the first attempt at this was pulled for
+// being too loud/harsh — see sfx.ts.
+const SFX_DURATION_IN_SECONDS = 0.6;
+const SFX_VOLUME = 0.22;
 
 type Shot = { from: number; durationInFrames: number };
 
@@ -244,13 +254,41 @@ const ClipVideo: React.FC<{
   );
 };
 
+// A short whoosh at a shot's own start frame — skipped at frame 0 of the
+// whole video (nothing to transition *from* yet). Which file plays is
+// picked deterministically from `seed`, same pattern as the background
+// music pick (see pickMusicTrack in server/render-server.js) but done
+// entirely client-side since the small, fixed sfx set ships in the repo
+// (public/audio/sfx/, listed in ./sfx.ts) rather than being probed
+// per-render.
+const CutSound: React.FC<{ from: number; seed: string; fps: number }> = ({
+  from,
+  seed,
+  fps,
+}) => {
+  if (from <= 0) {
+    return null;
+  }
+  const index = Math.floor(random(`${seed}:sfx`) * WHOOSH_FILES.length);
+  const file = WHOOSH_FILES[Math.min(index, WHOOSH_FILES.length - 1)];
+  return (
+    <Sequence
+      from={from}
+      durationInFrames={Math.round(SFX_DURATION_IN_SECONDS * fps)}
+    >
+      <Audio src={staticFile(file)} volume={SFX_VOLUME} />
+    </Sequence>
+  );
+};
+
 // Renders the clip timeline for one render: 1-2 short intro clips shown
 // back to back during the Hook, then one or more clips playing back to
 // back behind the rest of the video (the "tail" — see planClips/tailCount
 // for how many). Every allocation above MAX_SHOT_DURATION_IN_SECONDS is
-// sliced into several jump-cut shots (splitIntoShots), so nothing here
-// ever plays as one long static plan. Renders nothing (falls back to the
-// slides' own solid background) when no clips are provided.
+// sliced into several jump-cut shots (splitIntoShots), each with a quiet
+// whoosh at its own cut, so nothing here ever plays as one long static
+// plan. Renders nothing (falls back to the slides' own solid background)
+// when no clips are provided.
 export const BackgroundVideoLayer: React.FC<{
   introClips: VersusClip[];
   tailClips: VersusClip[];
@@ -278,29 +316,28 @@ export const BackgroundVideoLayer: React.FC<{
       : 0;
 
   const tailTotalDuration = totalDurationInFrames - hookDurationInFrames;
-  // Each tail clip after the first starts exactly where the previous
-  // clip's own real duration ends — not an equal split — so together they
-  // cover the whole span with distinct footage instead of one clip
-  // looping (see pickRushesForTailDuration in server/render-server.js for
-  // how many clips end up here and why there are usually just enough).
-  // The very last one still gets whatever remains, whatever that is —
-  // ClipVideo's own loop-if-too-short fallback covers it if that's more
-  // than its own real duration (unknown duration, e.g. a remote URL from
-  // an explicit Make-provided `clips`, or the rushes pool being too small
-  // to fully cover the span).
+  // Each tail clip gets an *equal* share of the tail span, not "however
+  // long the source file itself is" — that used to mean a clip whose own
+  // real duration happened to be long could eat the entire tail on its
+  // own, leaving `remaining` at 0 for every clip after it (silently
+  // dropped by the filter below — with 7-9 clips picked deliberately by
+  // Claude for distinct effects, that meant most of them never actually
+  // appeared). An even split keeps every clip's pace close to the
+  // MAX_SHOT_DURATION_IN_SECONDS cap on its own (so splitIntoShots below
+  // usually doesn't even need to re-cut it further) and guarantees every
+  // clip gets real screen time regardless of its own source length —
+  // ClipVideo already handles a source shorter than its share (loops it)
+  // or longer (picks a random window into it), so this only changes how
+  // big that share is, not how it's filled. The very last clip still
+  // absorbs whatever integer-division remainder is left, so the tail
+  // always adds up to exactly tailTotalDuration.
+  const perClipDuration = Math.floor(tailTotalDuration / tailClips.length);
   let tailCursor = 0;
   const tailAllocations = tailClips
     .map((clip, index) => {
       const isLast = index === tailClips.length - 1;
       const remaining = tailTotalDuration - tailCursor;
-      const knownDurationInFrames =
-        clip.durationInSeconds !== undefined
-          ? Math.floor(clip.durationInSeconds * fps)
-          : undefined;
-      const durationInFrames =
-        isLast || knownDurationInFrames === undefined
-          ? remaining
-          : Math.min(knownDurationInFrames, remaining);
+      const durationInFrames = isLast ? remaining : Math.min(perClipDuration, remaining);
       const from = hookDurationInFrames + tailCursor;
       tailCursor += durationInFrames;
       return { clip, from, durationInFrames, index };
@@ -346,6 +383,9 @@ export const BackgroundVideoLayer: React.FC<{
             seed={shotSeed}
           />
         </Sequence>
+      ))}
+      {allShots.map(({ shot, seed: shotSeed, key }) => (
+        <CutSound key={`sfx-${key}`} from={shot.from} seed={shotSeed} fps={fps} />
       ))}
     </AbsoluteFill>
   );

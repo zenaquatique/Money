@@ -303,16 +303,39 @@ ORB, celle-ci ne visant que les requêtes cross-origin). Si ce sondage
 échoue, le morceau choisi joue une fois sans boucler plutôt que de risquer
 un point de boucle incorrect — jamais d'erreur de rendu dans tous les cas.
 
-## Sous-titres animés mot par mot (`KaraokeText`)
+## Sous-titres dynamiques bas d'écran (`KaraokeText`)
 
 Le texte de chaque slide (Hook, Option A/B, Verdict, CTA, Top3/Educatif/
-Concept...) s'affiche désormais mot par mot façon karaoké, chaque mot
-apparaissant (fondu + léger effet de zoom) au moment où il est censé être
-prononcé, plutôt que le bloc entier d'un coup. `src/Versus/KaraokeText.tsx`
-est le composant partagé (réutilisé par les 4 formats via `../Versus/...`)
-qui fait ce travail — il remplace les anciens `<div>{text}</div>` dans les
-7 composants de slide (`HookSlide`, `OptionSlide`, `VerdictSlide`,
+Concept...) s'affiche en petits groupes de mots roulants façon sous-titres
+dynamiques courte-vidéo (style Hormozi/CapCut/Submagic), ancrés en bas de
+l'écran plutôt qu'en gros bloc centré — ça laisse le fond vidéo visible
+(l'ancien bloc centré le cachait trop) et lit comme un vrai montage plutôt
+qu'un pavé de texte figé. `src/Versus/KaraokeText.tsx` est le composant
+partagé (réutilisé par les 4 formats via `../Versus/...`) qui fait ce
+travail — il remplace les anciens `<div>{text}</div>` dans les 8
+composants de slide (`HookSlide`, `OptionSlide`, `VerdictSlide`,
 `ProductSlide`, `BenefitsSlide`, `CtaSlide`, `TipSlide`, `MessageSlide`).
+
+**Groupes roulants, pas accumulation** : contrairement à une v1 antérieure
+qui affichait tous les mots déjà "prononcés" en même temps (le bloc
+grossissait au fil de la phrase), seul un petit groupe de mots (3 par
+défaut, `DEFAULT_GROUP_SIZE`/prop `groupSize`) est visible à la fois — le
+groupe suivant **remplace** entièrement le précédent plutôt que de
+s'ajouter dessous. Chaque mot du groupe actif garde son propre pop-in
+(fondu + zoom) individuel, calculé sur le même découpage `durationInFrames
+÷ nombre de mots` qu'avant (voir "Timing" plus bas, inchangé). Exporté
+aussi : `wordIndexAtFrame`, l'utilitaire qui détermine quel mot est
+"courant" à une frame donnée — partagé avec `NumberOverlay` pour rester en
+phase sans dupliquer le calcul.
+
+**Position** : `SlideFrame.tsx` ancre maintenant tout le contenu de la
+slide en bas (`justifyContent: "flex-end"`, padding bas 140px) plutôt
+qu'au centre — la police de chaque `KaraokeText` a aussi été réduite en
+conséquence dans chaque slide (ex. Hook : 76px → 44px) pour rester
+proportionnée à ce nouvel espace, plus petit et bas d'écran. Le badge
+`NumberOverlay` (overlays de preuve chiffrée, voir plus bas) a été
+remonté (`bottom: "16%"` → `"34%"`) pour ne plus chevaucher cette nouvelle
+bande de sous-titres.
 
 **Timing** : chaque mot se voit attribuer une fenêtre de
 `durationInFrames ÷ nombre de mots` — une approximation (durée totale du
@@ -416,8 +439,9 @@ slide sans coupe ni mouvement dès lors qu'il était assez long — l'effet
 gère maintenant ça en deux volets :
 
 **Bug corrigé — les clips explicites n'étaient pas tous utilisés**
-(`src/Versus/clips.ts`) : quand Make envoie `clips` explicitement (3 rushs
-choisis par Claude, cas normal pour les 4 formats) sans le champ interne
+(`src/Versus/clips.ts`) : quand Make envoie `clips` explicitement (3 à 9
+rushs choisis par Claude selon le format et le prompt en place — voir
+`MAX_CLIPS` dans `server/render-server.js`) sans le champ interne
 `tailCount`, `planClips` réservait tous les clips sauf le dernier à un
 simple passage éclair pendant le Hook — le dernier clip seul couvrait
 ensuite TOUT le reste de la vidéo (options A/B + verdict, souvent 15+
@@ -426,8 +450,26 @@ c'était toujours la même source ré-écourtée, Gemini lisait ça comme "un
 plan fixe unique" même une fois les styles de caméra ajoutés. Corrigé :
 sans `tailCount` explicite, tous les clips deviennent à la fois intro (un
 bref aperçu de chacun pendant le Hook) et tail (chacun couvre une part
-proportionnelle du reste de la vidéo) — vérifié par rendu réel avant/après
-avec les 3 mêmes clips que Claude choisit désormais.
+proportionnelle du reste de la vidéo).
+
+**Bug corrigé — l'allocation du "tail" suivait la durée réelle du fichier,
+pas le nombre de clips** : même une fois le bug ci-dessus réglé, l'appel à
+`Math.min(knownDurationInFrames, remaining)` donnait à chaque clip sa
+propre durée réelle plutôt qu'une part égale du temps disponible — avec
+peu de clips (2-3) aux fichiers longs, les premiers épuisaient tout le
+budget "tail" et les suivants recevaient `remaining = 0` (silencieusement
+filtrés). Avec 7-9 clips choisis exprès par Claude pour leurs effets
+individuels, la plupart n'apparaissaient donc jamais. Corrigé :
+`perClipDuration = Math.floor(tailTotalDuration / tailClips.length)` —
+chaque clip reçoit une part égale (~1,5-2s pour 7-9 clips sur ~20s),
+proche ou sous le seuil `MAX_SHOT_DURATION_IN_SECONDS` (donc pas besoin
+d'un second découpage par `splitIntoShots`), et le dernier absorbe le
+reste de la division entière. `ClipVideo` gère déjà les deux sens (boucle
+si la source est plus courte que sa part, re-trim aléatoire si plus
+longue) — seule la taille de la part a changé, pas comment elle est
+remplie. Vérifié par rendu réel avec 8 clips distincts : chacun apparaît
+sur sa propre portion, changement visible toutes les ~2s sur toute la
+durée.
 
 **Coupes automatiques (jump cuts)** : aucun plan ne reste statique plus de
 `MAX_SHOT_DURATION_IN_SECONDS` (2,5s) d'affilée. Toute allocation de clip
@@ -457,20 +499,29 @@ zoom supplémentaire (`minScaleForRotation` dans `resolveShotMotion`) pour
 ne jamais exposer un coin vide ; vitesse et angle sont bornés (0,6-1,8x,
 ±8°) pour qu'une valeur aberrante ne puisse jamais casser un rendu.
 
-**Pas de transition sonore** : une première version ajoutait un bref
-"whoosh" synthétisé par script à chaque coupe (aucun accès aux
-bibliothèques CC0 habituelles depuis le sandbox de développement — voir
-l'historique de conversation), mais le rendu sonore était mauvais en
-conditions réelles et a été retiré (`public/audio/sfx/`, `src/Versus/sfx.ts`
-supprimés) — seuls les jump cuts et les mouvements de caméra restent.
-Si de vrais fichiers whoosh (enregistrés ou téléchargés manuellement)
-sont fournis un jour, le point d'intégration est simple à rouvrir : un
-composant `<Audio>` dans un `<Sequence>` au `from` de chaque shot, comme
-c'était fait avant.
+**Transitions sonores (v2)** : un bref whoosh joue à chaque coupe de plan
+(`CutSound` dans `BackgroundVideoLayer.tsx`, skip à la toute première
+frame de la vidéo), et un léger pop à chaque nouveau groupe de mots des
+sous-titres (`ChunkPopSounds` dans `KaraokeText.tsx`). Une v1 de ce whoosh
+avait été retirée après s'être révélée trop forte/dure en conditions
+réelles — v2 corrige ça sur trois points : synthèse plus douce (mélange
+bruit filtré + une fine sous-couche tonale, lissage passe-bas au lieu du
+bruit brut, pic normalisé à 0,5 au lieu de 0,85), durée plus courte
+(0,35-0,45s), et surtout un volume de lecture nettement plus bas
+(`SFX_VOLUME = 0.22` pour le whoosh, `POP_SFX_VOLUME = 0.16` pour le pop —
+contre 0,45 en v1). Fichiers synthétisés par script (toujours aucun accès
+aux bibliothèques CC0 depuis ce sandbox — voir l'historique de
+conversation pour le détail), 3 variantes de whoosh + 2 de pop dans
+`public/audio/sfx/`, listées dans `src/Versus/sfx.ts`
+(`WHOOSH_FILES`/`POP_FILES`) — fichier choisi à chaque déclenchement au
+hasard mais déterministe (`random(seed)`). Si le rendu sonore ne convient
+toujours pas, dis-le : c'est un aller-retour de synthèse à l'aveugle (pas
+d'écoute possible depuis ce sandbox), pas une science exacte du premier
+coup.
 
 Combiné à `NumberOverlay` : un texte long avec plusieurs prix (donc
 plusieurs badges) tombe naturellement sur une slide au montage déjà plus
-riche en coupes/zooms, sans lien direct entre les deux mais un effet
+riche en coupes/zooms/pops, sans lien direct entre les deux mais un effet
 cohérent à l'écran.
 
 ## Qualité de rendu (netteté)

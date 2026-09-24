@@ -27,7 +27,7 @@ export const MessageSlide: React.FC<{
         durationInFrames={durationInFrames}
         style={{
           color: colors.white,
-          fontSize: 64,
+          fontSize: 38,
           fontWeight: 700,
           lineHeight: 1.3,
           textAlign: "center",

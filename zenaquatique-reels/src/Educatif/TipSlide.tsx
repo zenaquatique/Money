@@ -30,8 +30,8 @@ export const TipSlide: React.FC<{
           gap: 12,
           border: `2px solid ${colors.aqua}`,
           borderRadius: 999,
-          padding: "10px 28px",
-          marginBottom: 40,
+          padding: "8px 22px",
+          marginBottom: 20,
           backgroundColor: hasVideoBackground
             ? "rgba(4,12,15,0.35)"
             : undefined,
@@ -40,7 +40,7 @@ export const TipSlide: React.FC<{
         <span
           style={{
             color: colors.aqua,
-            fontSize: 26,
+            fontSize: 20,
             fontWeight: 700,
             letterSpacing: 3,
             textTransform: "uppercase",
@@ -55,7 +55,7 @@ export const TipSlide: React.FC<{
         durationInFrames={durationInFrames}
         style={{
           color: colors.white,
-          fontSize: 56,
+          fontSize: 36,
           fontWeight: 700,
           lineHeight: 1.3,
           textAlign: "center",

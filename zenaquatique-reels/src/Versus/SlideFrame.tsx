@@ -49,9 +49,13 @@ export const SlideFrame: React.FC<{
         style={{
           opacity,
           transform: `translateY(${translateY}px)`,
-          justifyContent: "center",
+          // Bottom-anchored "caption band" (like short-form dynamic
+          // subtitles) rather than centered — keeps the background video
+          // visible instead of a big block of text sitting over the
+          // middle of the frame, where the actual subject usually is.
+          justifyContent: "flex-end",
           alignItems: "center",
-          padding: "80px 64px",
+          padding: "80px 64px 140px",
           fontFamily:
             "'Helvetica Neue', Helvetica, Arial, sans-serif",
         }}

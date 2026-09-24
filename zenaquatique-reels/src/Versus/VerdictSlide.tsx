@@ -46,11 +46,11 @@ export const VerdictSlide: React.FC<{
       <div
         style={{
           color: colors.aqua,
-          fontSize: 30,
+          fontSize: 22,
           fontWeight: 700,
           letterSpacing: 4,
           textTransform: "uppercase",
-          marginBottom: 32,
+          marginBottom: 18,
           textShadow,
         }}
       >
@@ -61,11 +61,11 @@ export const VerdictSlide: React.FC<{
         durationInFrames={verdictDurationInFrames}
         style={{
           color: colors.white,
-          fontSize: 60,
+          fontSize: 36,
           fontWeight: 800,
           lineHeight: 1.25,
           textAlign: "center",
-          marginBottom: 56,
+          marginBottom: 28,
           textShadow,
         }}
       />
@@ -77,8 +77,8 @@ export const VerdictSlide: React.FC<{
           color: colors.deepWater,
           background: colors.aqua,
           borderRadius: 999,
-          padding: "20px 44px",
-          fontSize: 32,
+          padding: "14px 32px",
+          fontSize: 24,
           fontWeight: 700,
           textAlign: "center",
         }}
@@ -92,10 +92,10 @@ export const VerdictSlide: React.FC<{
       <div
         style={{
           color: colors.softWhite,
-          fontSize: 24,
+          fontSize: 18,
           fontWeight: 600,
           letterSpacing: 2,
-          marginTop: 28,
+          marginTop: 16,
           textShadow,
         }}
       >

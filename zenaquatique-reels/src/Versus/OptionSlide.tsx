@@ -35,8 +35,8 @@ export const OptionSlide: React.FC<{
           gap: 12,
           border: `2px solid ${accent}`,
           borderRadius: 999,
-          padding: "10px 28px",
-          marginBottom: 40,
+          padding: "8px 22px",
+          marginBottom: 20,
           backgroundColor: hasVideoBackground
             ? "rgba(4,12,15,0.35)"
             : undefined,
@@ -45,7 +45,7 @@ export const OptionSlide: React.FC<{
         <span
           style={{
             color: accent,
-            fontSize: 26,
+            fontSize: 20,
             fontWeight: 700,
             letterSpacing: 3,
             textTransform: "uppercase",
@@ -60,7 +60,7 @@ export const OptionSlide: React.FC<{
         durationInFrames={durationInFrames}
         style={{
           color: colors.white,
-          fontSize: 56,
+          fontSize: 36,
           fontWeight: 700,
           lineHeight: 1.3,
           textAlign: "center",
