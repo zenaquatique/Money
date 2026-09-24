@@ -70,20 +70,35 @@ const clampRotateDeg = (deg: number): number => Math.min(8, Math.max(-8, deg));
 const isShotEffect = (value: unknown): value is ShotEffect =>
   typeof value === "string" && (SHOT_EFFECTS as string[]).includes(value);
 
+// `speed`/`rotateDeg` arrive as a plain JS number when Make relays
+// Claude's JSON as-is, but as a string when a Make module maps them
+// through a "text"-typed field (e.g. to dodge that field's own "number"
+// type rejecting an empty override — see the HTTP module's Body content
+// schema) — both are valid explicit overrides and get parsed the same
+// way; anything else (missing, empty string, "beaucoup", ...) means no
+// override, not an error.
+const parseOptionalFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
 const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
   const autoEffect =
     SHOT_EFFECTS[Math.floor(random(`${seed}:style`) * SHOT_EFFECTS.length)];
   const base = SHOT_MOTION[isShotEffect(clip.effect) ? clip.effect : autoEffect];
 
-  const hasRotateOverride =
-    typeof clip.rotateDeg === "number" && Number.isFinite(clip.rotateDeg);
-  const rotateFrom = hasRotateOverride ? 0 : base.rotateFrom;
-  const rotateTo = hasRotateOverride
-    ? clampRotateDeg(clip.rotateDeg as number)
-    : base.rotateTo;
+  const rotateOverride = parseOptionalFiniteNumber(clip.rotateDeg);
+  const rotateFrom = rotateOverride !== undefined ? 0 : base.rotateFrom;
+  const rotateTo =
+    rotateOverride !== undefined ? clampRotateDeg(rotateOverride) : base.rotateTo;
 
-  const hasSpeedOverride =
-    typeof clip.speed === "number" && Number.isFinite(clip.speed);
+  const speedOverride = parseOptionalFiniteNumber(clip.speed);
 
   // A rotated frame needs extra overscale to avoid exposing an empty
   // corner — each preset already overscales enough for its own rotation,
@@ -98,7 +113,7 @@ const resolveShotMotion = (clip: VersusClip, seed: string): ShotMotion => {
     scaleTo: Math.max(base.scaleTo, minScaleForRotation),
     rotateFrom,
     rotateTo,
-    speed: hasSpeedOverride ? clampSpeed(clip.speed as number) : base.speed,
+    speed: speedOverride !== undefined ? clampSpeed(speedOverride) : base.speed,
   };
 };
 
