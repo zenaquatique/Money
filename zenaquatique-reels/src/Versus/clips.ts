@@ -8,15 +8,19 @@ export type ClipPlan = {
 // Splits an ordered `clips` array into the short intro cuts shown during
 // the Hook and the clip(s) that play continuously behind the rest of the
 // video. `tailCount` says how many of the *last* clips in the array belong
-// to that tail — everything before them is intro. Historically the tail
-// was always exactly 1 clip (server/render-server.js's fixed group of 3:
-// 2 intro + 1 tail), which is still what happens when `tailCount` is
-// omitted (Make sending `clips` explicitly, without this internal field).
-// When the caller needs the tail to cover more than one clip can on its
-// own — see pickRushesForTailDuration in server/render-server.js — it sets
-// `tailCount` to however many of the trailing clips make up that
-// sequence, so BackgroundVideoLayer can chain them instead of looping a
-// single one.
+// to that tail — everything before them is intro. Only set internally, by
+// server/render-server.js's own auto-rotation (pickRushesForTailDuration)
+// when it needs the tail to cover more than one clip can on its own, so
+// BackgroundVideoLayer can chain them instead of looping a single one.
+//
+// When `tailCount` is omitted instead — Make/Claude sending `clips`
+// explicitly, which is the normal case for all 4 formats — every clip
+// becomes BOTH an intro cut and part of the tail sequence, rather than
+// reserving all but the last as brief Hook-only glimpses: Claude picks
+// each clip deliberately (often with its own `effect`/`speed`, see
+// ShotEffect in types.ts) expecting it to actually appear, in order, not
+// mostly be discarded after a flash during the Hook while one clip alone
+// covers the rest of the video.
 export const planClips = (
   clips: VersusClip[] | undefined,
   tailCount: number | undefined,
@@ -27,13 +31,11 @@ export const planClips = (
     return { introClips: [], tailClips: [] };
   }
 
-  // Only one clip available at all: it serves as both intro and tail
-  // (regardless of tailCount) rather than being intro-only with no tail.
-  if (usable.length === 1) {
+  if (usable.length === 1 || tailCount === undefined) {
     return { introClips: usable, tailClips: usable };
   }
 
-  const effectiveTailCount = Math.max(1, Math.min(tailCount ?? 1, usable.length));
+  const effectiveTailCount = Math.max(1, Math.min(tailCount, usable.length));
   return {
     introClips: usable.slice(0, usable.length - effectiveTailCount),
     tailClips: usable.slice(usable.length - effectiveTailCount),

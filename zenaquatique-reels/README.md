@@ -407,6 +407,20 @@ slide sans coupe ni mouvement dès lors qu'il était assez long — l'effet
 "diaporama figé" relevé par l'audit qualité IA. `BackgroundVideoLayer.tsx`
 gère maintenant ça en deux volets :
 
+**Bug corrigé — les clips explicites n'étaient pas tous utilisés**
+(`src/Versus/clips.ts`) : quand Make envoie `clips` explicitement (3 rushs
+choisis par Claude, cas normal pour les 4 formats) sans le champ interne
+`tailCount`, `planClips` réservait tous les clips sauf le dernier à un
+simple passage éclair pendant le Hook — le dernier clip seul couvrait
+ensuite TOUT le reste de la vidéo (options A/B + verdict, souvent 15+
+secondes). Les jump cuts/zoom s'appliquaient bien dessus, mais comme
+c'était toujours la même source ré-écourtée, Gemini lisait ça comme "un
+plan fixe unique" même une fois les styles de caméra ajoutés. Corrigé :
+sans `tailCount` explicite, tous les clips deviennent à la fois intro (un
+bref aperçu de chacun pendant le Hook) et tail (chacun couvre une part
+proportionnelle du reste de la vidéo) — vérifié par rendu réel avant/après
+avec les 3 mêmes clips que Claude choisit désormais.
+
 **Coupes automatiques (jump cuts)** : aucun plan ne reste statique plus de
 `MAX_SHOT_DURATION_IN_SECONDS` (2,5s) d'affilée. Toute allocation de clip
 (intro ou tail) plus longue que ça est découpée en plusieurs plans
